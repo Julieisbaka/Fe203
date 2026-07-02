@@ -31,7 +31,9 @@ fn walk(dir: &Path, root: &Path, exclude: &[String], include: &[String], out: &m
         }
         if path.is_dir() {
             walk(&path, root, exclude, include, out);
-        } else if path.extension().is_some_and(|ext| ext == "rs") || matches_any_pattern(&path, root, include) {
+        } else if path.extension().is_some_and(|ext| ext == "rs")
+            || matches_any_pattern(&path, root, include)
+        {
             out.push(path);
         }
     }
@@ -63,10 +65,7 @@ mod tests {
     use crate::rules::all_rules;
 
     fn temp_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "fe203-test-{name}-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("fe203-test-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -120,8 +119,12 @@ mod tests {
         let mut files = Vec::new();
         discover_files(&dir, &[], &["Cargo.toml".to_string()], &mut files);
 
-        assert!(files.iter().any(|path| path.ends_with("Cargo.toml") || path.ends_with("Cargo.toml")));
-        assert!(files.iter().any(|path| path.ends_with("build.rs") || path.ends_with("build.rs")));
+        assert!(files
+            .iter()
+            .any(|path| path.ends_with("Cargo.toml") || path.ends_with("Cargo.toml")));
+        assert!(files
+            .iter()
+            .any(|path| path.ends_with("build.rs") || path.ends_with("build.rs")));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -133,7 +136,16 @@ mod tests {
         std::fs::write(dir.join("nested/debug/cache.rs.bk"), "x").unwrap();
 
         let mut files = Vec::new();
-        discover_files(&dir, &["debug".to_string(), "*.pdb".to_string(), "**/*.rs.bk".to_string()], &[], &mut files);
+        discover_files(
+            &dir,
+            &[
+                "debug".to_string(),
+                "*.pdb".to_string(),
+                "**/*.rs.bk".to_string(),
+            ],
+            &[],
+            &mut files,
+        );
         assert!(files.is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -154,7 +166,9 @@ mod tests {
 }
 
 fn matches_any_pattern(path: &Path, root: &Path, patterns: &[String]) -> bool {
-    patterns.iter().any(|pattern| matches_pattern(path, root, pattern))
+    patterns
+        .iter()
+        .any(|pattern| matches_pattern(path, root, pattern))
 }
 
 fn matches_pattern(path: &Path, root: &Path, pattern: &str) -> bool {
@@ -163,7 +177,10 @@ fn matches_pattern(path: &Path, root: &Path, pattern: &str) -> bool {
         .file_name()
         .map(|name| name.to_string_lossy().to_string())
         .unwrap_or_default();
-    let cleaned = pattern.trim().trim_start_matches("./").trim_end_matches('/');
+    let cleaned = pattern
+        .trim()
+        .trim_start_matches("./")
+        .trim_end_matches('/');
     if cleaned.is_empty() {
         return false;
     }
@@ -176,7 +193,11 @@ fn matches_pattern(path: &Path, root: &Path, pattern: &str) -> bool {
     // Slash-containing patterns are resolved relative to the scan root first
     // (standard gitignore-like semantics), falling back to matching against
     // the full path for backward compatibility.
-    if let Some(relative) = path.strip_prefix(root).ok().map(|p| p.to_string_lossy().replace('\\', "/")) {
+    if let Some(relative) = path
+        .strip_prefix(root)
+        .ok()
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+    {
         if relative == cleaned
             || relative.ends_with(&format!("/{cleaned}"))
             || glob_match_path(cleaned, &relative)
@@ -235,8 +256,14 @@ fn glob_match_segment(pattern: &str, text: &str) -> bool {
 }
 
 fn glob_match_path(pattern: &str, text: &str) -> bool {
-    let pattern_segments: Vec<&str> = pattern.split('/').filter(|segment| !segment.is_empty()).collect();
-    let text_segments: Vec<&str> = text.split('/').filter(|segment| !segment.is_empty()).collect();
+    let pattern_segments: Vec<&str> = pattern
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect();
+    let text_segments: Vec<&str> = text
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect();
     let mut memo = vec![vec![None; text_segments.len() + 1]; pattern_segments.len() + 1];
 
     fn inner(
@@ -253,13 +280,30 @@ fn glob_match_path(pattern: &str, text: &str) -> bool {
         let result = if pattern_index == pattern_segments.len() {
             text_index == text_segments.len()
         } else if pattern_segments[pattern_index] == "**" {
-            inner(pattern_segments, text_segments, pattern_index + 1, text_index, memo)
-                || (text_index < text_segments.len()
-                    && inner(pattern_segments, text_segments, pattern_index, text_index + 1, memo))
+            inner(
+                pattern_segments,
+                text_segments,
+                pattern_index + 1,
+                text_index,
+                memo,
+            ) || (text_index < text_segments.len()
+                && inner(
+                    pattern_segments,
+                    text_segments,
+                    pattern_index,
+                    text_index + 1,
+                    memo,
+                ))
         } else if text_index < text_segments.len()
             && glob_match_segment(pattern_segments[pattern_index], text_segments[text_index])
         {
-            inner(pattern_segments, text_segments, pattern_index + 1, text_index + 1, memo)
+            inner(
+                pattern_segments,
+                text_segments,
+                pattern_index + 1,
+                text_index + 1,
+                memo,
+            )
         } else {
             false
         };

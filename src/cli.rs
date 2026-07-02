@@ -104,9 +104,9 @@ pub fn parse(args: &[String]) -> Result<CliOptions, String> {
                 opts.rule_filter = Some(split_list(value, str::to_uppercase));
             }
             "--categories" => {
-                let value = iter
-                    .next()
-                    .ok_or_else(|| format!("{arg} requires a comma-separated list of categories"))?;
+                let value = iter.next().ok_or_else(|| {
+                    format!("{arg} requires a comma-separated list of categories")
+                })?;
                 opts.category_filter = Some(split_list(value, str::to_lowercase));
             }
             other if other.starts_with('-') => {
@@ -153,7 +153,10 @@ mod tests {
 
     #[test]
     fn filters_apply_to_rules() {
-        let args: Vec<String> = ["--categories", "secrets"].iter().map(|s| s.to_string()).collect();
+        let args: Vec<String> = ["--categories", "secrets"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         let opts = parse(&args).unwrap();
         for rule in all_rules() {
             let expected = rule.category().name() == "secrets";
@@ -172,7 +175,10 @@ mod tests {
 
     #[test]
     fn parses_explain_and_init_config() {
-        let args: Vec<String> = ["--explain", "fe080", "--init-config"].iter().map(|s| s.to_string()).collect();
+        let args: Vec<String> = ["--explain", "fe080", "--init-config"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         let opts = parse(&args).unwrap();
         assert_eq!(opts.explain, Some("FE080".to_string()));
         assert_eq!(opts.init_config, Some(PathBuf::from("fe203.toml")));

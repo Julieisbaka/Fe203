@@ -52,7 +52,14 @@ pub trait Rule {
     fn scan(&self, ctx: &FileContext) -> Vec<Finding>;
 
     /// Convenience constructor so rule impls stay terse.
-    fn finding(&self, ctx: &FileContext, line: usize, column: usize, message: String, snippet: &str) -> Finding {
+    fn finding(
+        &self,
+        ctx: &FileContext,
+        line: usize,
+        column: usize,
+        message: String,
+        snippet: &str,
+    ) -> Finding {
         Finding {
             rule_id: self.id(),
             rule_name: self.name(),
@@ -83,7 +90,10 @@ pub fn all_rules() -> Vec<Box<dyn Rule>> {
 
 /// Finds a built-in rule by ID.
 pub fn rule_by_id<'a>(rules: &'a [Box<dyn Rule>], id: &str) -> Option<&'a dyn Rule> {
-    rules.iter().map(|rule| rule.as_ref()).find(|rule| rule.id() == id)
+    rules
+        .iter()
+        .map(|rule| rule.as_ref())
+        .find(|rule| rule.id() == id)
 }
 
 /// Renders a generated rule index from the registry.
@@ -122,10 +132,24 @@ pub fn render_rule_explanation(rule: &dyn Rule) -> String {
 
 /// Returns true when the current line, the immediately preceding comment
 /// line, or a whole-file `fe203-ignore-file` directive suppresses this rule.
-pub(crate) fn is_rule_ignored(ctx: &FileContext, line_no: usize, rule_id: &str, rule_name: &str, category: Category) -> bool {
-    line_has_ignore(ctx.content.lines().nth(line_no.saturating_sub(1)), rule_id, rule_name, category)
-        || line_has_ignore(ctx.content.lines().nth(line_no.saturating_sub(2)), rule_id, rule_name, category)
-        || content_has_file_ignore(ctx.content, rule_id, rule_name, category)
+pub(crate) fn is_rule_ignored(
+    ctx: &FileContext,
+    line_no: usize,
+    rule_id: &str,
+    rule_name: &str,
+    category: Category,
+) -> bool {
+    line_has_ignore(
+        ctx.content.lines().nth(line_no.saturating_sub(1)),
+        rule_id,
+        rule_name,
+        category,
+    ) || line_has_ignore(
+        ctx.content.lines().nth(line_no.saturating_sub(2)),
+        rule_id,
+        rule_name,
+        category,
+    ) || content_has_file_ignore(ctx.content, rule_id, rule_name, category)
 }
 
 fn line_has_ignore(line: Option<&str>, rule_id: &str, rule_name: &str, category: Category) -> bool {
@@ -148,7 +172,12 @@ fn line_has_ignore(line: Option<&str>, rule_id: &str, rule_name: &str, category:
 
 /// Returns true if `content` contains a `fe203-ignore-file` directive
 /// (anywhere, in any comment) matching the rule.
-fn content_has_file_ignore(content: &str, rule_id: &str, rule_name: &str, category: Category) -> bool {
+fn content_has_file_ignore(
+    content: &str,
+    rule_id: &str,
+    rule_name: &str,
+    category: Category,
+) -> bool {
     for line in content.lines() {
         let Some(comment) = extract_comment_text(line) else {
             continue;

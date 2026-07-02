@@ -110,7 +110,9 @@ mod tests {
             column: 5,
             message: "`todo!` macro found".to_string(),
             snippet: "todo!();".to_string(),
-            suggestion: Some("Implement the code path or remove the placeholder macro.".to_string()),
+            suggestion: Some(
+                "Implement the code path or remove the placeholder macro.".to_string(),
+            ),
         }
     }
 

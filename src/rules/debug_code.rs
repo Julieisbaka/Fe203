@@ -31,9 +31,7 @@ impl Rule for MacroRule {
     }
     fn suggestion(&self) -> Option<&'static str> {
         Some(match self.macro_name {
-            "todo" | "unimplemented" => {
-                "Implement the code path or remove the placeholder macro."
-            }
+            "todo" | "unimplemented" => "Implement the code path or remove the placeholder macro.",
             "dbg" => "Remove the debug macro or replace it with intentional logging.",
             "panic" => "Prefer returning a Result or handling the error explicitly.",
             _ => return None,
@@ -124,9 +122,8 @@ mod tests {
 
     #[test]
     fn ignores_identifiers_and_comments() {
-        let findings = scan_all(
-            "// todo!() in a comment\nlet my_todo = 1;\nlet dbgx = dbg_helper();\n",
-        );
+        let findings =
+            scan_all("// todo!() in a comment\nlet my_todo = 1;\nlet dbgx = dbg_helper();\n");
         assert!(findings.is_empty());
     }
 

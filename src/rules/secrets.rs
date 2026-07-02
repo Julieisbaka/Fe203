@@ -24,8 +24,15 @@ fn assignment_eq_index(line: &str) -> Option<usize> {
             continue;
         }
         let prev = if i > 0 { bytes[i - 1] } else { b' ' };
-        let next = if i + 1 < bytes.len() { bytes[i + 1] } else { b' ' };
-        if matches!(prev, b'=' | b'!' | b'<' | b'>' | b'+' | b'-' | b'*' | b'/' | b'%' | b'&' | b'|' | b'^') {
+        let next = if i + 1 < bytes.len() {
+            bytes[i + 1]
+        } else {
+            b' '
+        };
+        if matches!(
+            prev,
+            b'=' | b'!' | b'<' | b'>' | b'+' | b'-' | b'*' | b'/' | b'%' | b'&' | b'|' | b'^'
+        ) {
             continue;
         }
         if matches!(next, b'=' | b'>') {

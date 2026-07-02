@@ -148,7 +148,10 @@ impl Rule for DynamicRegexRule {
             if is_rule_ignored(ctx, line_no, self.id(), self.name(), self.category()) {
                 continue;
             }
-            if !line.contains("Regex::new(") && !line.contains("regex::Regex::new(") && !line.contains("RegexBuilder::new(") {
+            if !line.contains("Regex::new(")
+                && !line.contains("regex::Regex::new(")
+                && !line.contains("RegexBuilder::new(")
+            {
                 continue;
             }
             let dynamic = line.contains("format!(")
@@ -375,10 +378,12 @@ fn is_anchored(pattern: &str) -> bool {
 /// actually a regex (as opposed to a plain identifier or short literal that
 /// merely happens to sit next to an unrelated `.find(`/`.captures(` call).
 fn looks_like_regex(pattern: &str) -> bool {
-    pattern.chars().any(|c| matches!(
-        c,
-        '[' | ']' | '(' | ')' | '+' | '*' | '?' | '^' | '$' | '\\' | '|' | '{' | '}' | '.'
-    ))
+    pattern.chars().any(|c| {
+        matches!(
+            c,
+            '[' | ']' | '(' | ')' | '+' | '*' | '?' | '^' | '$' | '\\' | '|' | '{' | '}' | '.'
+        )
+    })
 }
 
 #[cfg(test)]

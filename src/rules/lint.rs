@@ -52,7 +52,8 @@ impl Rule for ClampLikePatternRule {
                             search_start = start_idx + start_pat.len();
                             continue;
                         }
-                        let snippet = snippet_for_range(ctx.content, start_idx, end_idx + end_pat.len());
+                        let snippet =
+                            snippet_for_range(ctx.content, start_idx, end_idx + end_pat.len());
                         findings.push(self.finding(
                             ctx,
                             line_no,
@@ -397,7 +398,10 @@ fn count_identifier_occurrences(content: &str, name: &str) -> usize {
                     if index + 1 < bytes.len() && bytes[index] == b'/' && bytes[index + 1] == b'*' {
                         depth += 1;
                         index += 2;
-                    } else if index + 1 < bytes.len() && bytes[index] == b'*' && bytes[index + 1] == b'/' {
+                    } else if index + 1 < bytes.len()
+                        && bytes[index] == b'*'
+                        && bytes[index + 1] == b'/'
+                    {
                         depth -= 1;
                         index += 2;
                     } else {
@@ -561,9 +565,8 @@ mod tests {
 
     #[test]
     fn ignores_string_literals_when_counting_variable_usage() {
-        let findings = scan_all(
-            "fn f() {\n    let secret = 1;\n    let _path = \"../secret\";\n}\n",
-        );
+        let findings =
+            scan_all("fn f() {\n    let secret = 1;\n    let _path = \"../secret\";\n}\n");
         let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
         assert_eq!(ids, ["FE063"]);
     }

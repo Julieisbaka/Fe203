@@ -36,7 +36,9 @@ pub fn run(args: &[String]) -> i32 {
     let registry = rules::all_rules();
 
     if let Some(path) = &opts.init_config {
-        let template = Config::template_from_workspace(&std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+        let template = Config::template_from_workspace(
+            &std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+        );
         if path.exists() {
             eprintln!("error: template target already exists: {}", path.display());
             return 2;

@@ -120,7 +120,10 @@ impl Rule for ShellStringInjectionRule {
 
 /// All shell rules.
 pub fn rules() -> Vec<Box<dyn Rule>> {
-    vec![Box::new(CommandExecutionRule), Box::new(ShellStringInjectionRule)]
+    vec![
+        Box::new(CommandExecutionRule),
+        Box::new(ShellStringInjectionRule),
+    ]
 }
 
 #[cfg(test)]

@@ -7,7 +7,15 @@ use crate::rules::{is_rule_ignored, FileContext, Rule};
 
 const JOIN_CALLS: &[&str] = &[".join(", ".push("];
 const UNTRUSTED_KEYWORDS: &[&str] = &[
-    "user", "input", "param", "arg", "request", "req", "untrusted", "external", "query",
+    "user",
+    "input",
+    "param",
+    "arg",
+    "request",
+    "req",
+    "untrusted",
+    "external",
+    "query",
 ];
 
 /// Detects a literal `..` path segment passed to `.join(`, `.push(`, or
@@ -145,7 +153,10 @@ impl Rule for UnsanitizedPathInputRule {
 
 /// All path-safety rules.
 pub fn rules() -> Vec<Box<dyn Rule>> {
-    vec![Box::new(PathTraversalLiteralRule), Box::new(UnsanitizedPathInputRule)]
+    vec![
+        Box::new(PathTraversalLiteralRule),
+        Box::new(UnsanitizedPathInputRule),
+    ]
 }
 
 /// Returns (1-based column of the call start, argument text) for each

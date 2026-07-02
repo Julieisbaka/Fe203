@@ -58,7 +58,12 @@ fn full_pipeline_finds_all_requested_patterns() {
     let registry = all_rules();
     let rules: Vec<&dyn Rule> = registry.iter().map(|r| r.as_ref()).collect();
     let mut files = Vec::new();
-    discover_files(&dir, &Config::default().exclude, &Config::default().include, &mut files);
+    discover_files(
+        &dir,
+        &Config::default().exclude,
+        &Config::default().include,
+        &mut files,
+    );
     let findings = scan_files(&files, &rules);
 
     let mut ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();

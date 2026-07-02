@@ -52,8 +52,7 @@ impl Config {
     pub fn load(path: &Path) -> Result<Config, String> {
         let text = std::fs::read_to_string(path)
             .map_err(|e| format!("cannot read config {}: {e}", path.display()))?;
-        Config::parse(&text)
-            .map_err(|e| format!("invalid config {}: {e}", path.display()))
+        Config::parse(&text).map_err(|e| format!("invalid config {}: {e}", path.display()))
     }
 
     /// Whether a rule should run: an explicit rule toggle wins, then the
@@ -105,13 +104,18 @@ impl Config {
                 }
                 "paths" => {
                     if key == "exclude" {
-                        config.exclude = parse_string_array(value)
-                            .ok_or_else(|| format!("line {}: expected array of strings", line_no + 1))?;
+                        config.exclude = parse_string_array(value).ok_or_else(|| {
+                            format!("line {}: expected array of strings", line_no + 1)
+                        })?;
                     } else if key == "include" {
-                        config.include = parse_string_array(value)
-                            .ok_or_else(|| format!("line {}: expected array of strings", line_no + 1))?;
+                        config.include = parse_string_array(value).ok_or_else(|| {
+                            format!("line {}: expected array of strings", line_no + 1)
+                        })?;
                     } else {
-                        return Err(format!("line {}: unknown key `{key}` in [paths]", line_no + 1));
+                        return Err(format!(
+                            "line {}: unknown key `{key}` in [paths]",
+                            line_no + 1
+                        ));
                     }
                 }
                 "" => return Err(format!("line {}: key outside of a section", line_no + 1)),
@@ -188,7 +192,10 @@ fn parse_gitignore_entries(text: &str) -> Vec<String> {
         if line.is_empty() || line.starts_with('!') {
             continue;
         }
-        let trimmed = line.trim_start_matches("./").trim_start_matches('/').trim_end_matches('/');
+        let trimmed = line
+            .trim_start_matches("./")
+            .trim_start_matches('/')
+            .trim_end_matches('/');
         if !trimmed.is_empty() {
             entries.push(trimmed.to_string());
         }
@@ -242,14 +249,18 @@ mod tests {
         let config = Config::parse("[rulesets]\ndebug = false\n").unwrap();
         for rule in all_rules() {
             let expected = rule.category().name() != "debug";
-            assert_eq!(config.rule_enabled(rule.as_ref()), expected, "{}", rule.id());
+            assert_eq!(
+                config.rule_enabled(rule.as_ref()),
+                expected,
+                "{}",
+                rule.id()
+            );
         }
     }
 
     #[test]
     fn rule_toggle_overrides_ruleset() {
-        let config =
-            Config::parse("[rulesets]\ndebug = false\n[rules]\nfe001 = true\n").unwrap();
+        let config = Config::parse("[rulesets]\ndebug = false\n[rules]\nfe001 = true\n").unwrap();
         let rules = all_rules();
         let todo = rules.iter().find(|r| r.id() == "FE001").unwrap();
         let dbg = rules.iter().find(|r| r.id() == "FE003").unwrap();
@@ -277,7 +288,11 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("fe203-template-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join(".gitignore"), "target\n*.cache\n# comment\n!keep\n").unwrap();
+        std::fs::write(
+            dir.join(".gitignore"),
+            "target\n*.cache\n# comment\n!keep\n",
+        )
+        .unwrap();
 
         let template = Config::template_from_workspace(&dir);
         assert!(template.contains("include = [\"Cargo.toml\"]"));
