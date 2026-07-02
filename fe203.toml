@@ -1,0 +1,17 @@
+# Fe203 configuration (all settings optional; everything is enabled by default).
+
+[rulesets]
+# Enable or disable whole categories.
+debug = true
+unsafe = true
+secrets = true
+lint = true
+regex = true
+
+[rules]
+# Per-rule overrides win over category toggles.
+# FE003 = false   # allow dbg!()
+
+[paths]
+# Directory or file names skipped during discovery.
+exclude = ["target", ".git"]

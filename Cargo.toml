@@ -1,0 +1,9 @@
+[package]
+name = "fe203"
+version = "0.0.1"
+edition = "2021"
+description = "A fast yet powerful CLI tool for scanning and linting Rust code."
+license = "MIT"
+repository = "https://github.com/Julieisbaka/Fe203"
+
+[dependencies]
