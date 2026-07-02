@@ -373,16 +373,144 @@ fn parse_const_name(line: &str) -> Option<String> {
 }
 
 fn is_used_once_in_content(content: &str, name: &str) -> bool {
+    count_identifier_occurrences(content, name) == 1
+}
+
+fn count_identifier_occurrences(content: &str, name: &str) -> usize {
+    let bytes = content.as_bytes();
+    let needle = name.as_bytes();
+    let mut index = 0;
     let mut count = 0;
-    let mut start = 0;
-    while let Some(pos) = content[start..].find(name) {
-        count += 1;
-        if count > 1 {
-            return false;
+
+    while index < bytes.len() {
+        match bytes[index] {
+            b'/' if index + 1 < bytes.len() && bytes[index + 1] == b'/' => {
+                index += 2;
+                while index < bytes.len() && bytes[index] != b'\n' {
+                    index += 1;
+                }
+            }
+            b'/' if index + 1 < bytes.len() && bytes[index + 1] == b'*' => {
+                index += 2;
+                let mut depth = 1;
+                while index < bytes.len() && depth > 0 {
+                    if index + 1 < bytes.len() && bytes[index] == b'/' && bytes[index + 1] == b'*' {
+                        depth += 1;
+                        index += 2;
+                    } else if index + 1 < bytes.len() && bytes[index] == b'*' && bytes[index + 1] == b'/' {
+                        depth -= 1;
+                        index += 2;
+                    } else {
+                        index += 1;
+                    }
+                }
+            }
+            b'"' => {
+                index = skip_string_literal(bytes, index + 1, b'"');
+            }
+            b'\'' => {
+                index = skip_char_literal(bytes, index + 1);
+            }
+            b'r' => {
+                if let Some(end) = skip_raw_string_literal(bytes, index) {
+                    index = end;
+                } else if is_ident_start(bytes[index]) {
+                    let start = index;
+                    index += 1;
+                    while index < bytes.len() && is_ident_continue(bytes[index]) {
+                        index += 1;
+                    }
+                    if &bytes[start..index] == needle {
+                        count += 1;
+                    }
+                } else {
+                    index += 1;
+                }
+            }
+            byte if is_ident_start(byte) => {
+                let start = index;
+                index += 1;
+                while index < bytes.len() && is_ident_continue(bytes[index]) {
+                    index += 1;
+                }
+                if &bytes[start..index] == needle {
+                    count += 1;
+                }
+            }
+            _ => {
+                index += 1;
+            }
         }
-        start += pos + name.len();
     }
-    count == 1
+
+    count
+}
+
+fn skip_string_literal(bytes: &[u8], mut index: usize, terminator: u8) -> usize {
+    while index < bytes.len() {
+        if bytes[index] == b'\\' {
+            index += 2;
+        } else if bytes[index] == terminator {
+            return index + 1;
+        } else {
+            index += 1;
+        }
+    }
+    index
+}
+
+fn skip_char_literal(bytes: &[u8], mut index: usize) -> usize {
+    while index < bytes.len() {
+        if bytes[index] == b'\\' {
+            index += 2;
+        } else if bytes[index] == b'\'' {
+            return index + 1;
+        } else {
+            index += 1;
+        }
+    }
+    index
+}
+
+fn skip_raw_string_literal(bytes: &[u8], index: usize) -> Option<usize> {
+    let mut hash_count = 0;
+    let mut cursor = index + 1;
+    while cursor < bytes.len() && bytes[cursor] == b'#' {
+        hash_count += 1;
+        cursor += 1;
+    }
+    if cursor >= bytes.len() || bytes[cursor] != b'"' {
+        return None;
+    }
+
+    cursor += 1;
+    while cursor < bytes.len() {
+        if bytes[cursor] == b'"' {
+            let mut end = cursor + 1;
+            let mut matched = true;
+            for _ in 0..hash_count {
+                if end >= bytes.len() || bytes[end] != b'#' {
+                    matched = false;
+                    break;
+                }
+                end += 1;
+            }
+            if matched {
+                return Some(end);
+            }
+        }
+        cursor += 1;
+    }
+
+    Some(bytes.len())
+}
+
+fn is_ident_start(byte: u8) -> bool {
+    byte == b'_' || byte.is_ascii_alphabetic()
+}
+
+fn is_ident_continue(byte: u8) -> bool {
+    byte == b'_' || byte.is_ascii_alphanumeric()
 }
 
 #[cfg(test)]
@@ -429,6 +557,15 @@ mod tests {
         );
         let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
         assert_eq!(ids, ["FE064"]);
+    }
+
+    #[test]
+    fn ignores_string_literals_when_counting_variable_usage() {
+        let findings = scan_all(
+            "fn f() {\n    let secret = 1;\n    let _path = \"../secret\";\n}\n",
+        );
+        let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
+        assert_eq!(ids, ["FE063"]);
     }
 
     #[test]

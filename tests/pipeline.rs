@@ -81,6 +81,7 @@ fn full_pipeline_finds_all_requested_patterns() {
             "FE063", // bounded
             "FE063", // password
             "FE063", // api_key
+            "FE063", // secret
             "FE063", // unused
             "FE064", // unused constant
             "FE080", // nested regex quantifier

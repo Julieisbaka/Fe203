@@ -1,4 +1,4 @@
-//! Regex-focused rules. These are intentionally heuristic for `0.0.1`-style
+//! Regex-focused rules. These are intentionally heuristic.
 //! text scanning, but they still catch common footguns.
 // fe203-ignore-file FE080, FE081, FE082, FE083
 
