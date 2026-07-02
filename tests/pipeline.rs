@@ -1,4 +1,5 @@
 //! End-to-end test: fixture files on disk -> discovery -> rules -> findings.
+// fe203-ignore-file all
 
 use std::path::PathBuf;
 
@@ -33,8 +34,19 @@ fn config() {
     //
     let _ = regex::Regex::new(r"(a+)+$");
     let _ = regex::Regex::new(r".*token.*.*");
+    let _ = regex::Regex::new(r"foo||bar");
+    let _ = regex::RegexBuilder::new(format!("{}", pattern));
+    let _ = regex::Regex::new("[a-z]+").is_match(input);
     let unused = 1;
     const MAX_RETRY: usize = 3;
+}
+
+fn shell_and_paths(user: &str) {
+    std::process::Command::new("ls").arg("-la");
+    std::process::Command::new("sh").arg("-c").arg(format!("echo {}", user));
+    let base = std::path::PathBuf::from("data");
+    let _ = base.join("../secret");
+    let _ = base.join(user_input);
 }
 "#;
 
@@ -69,11 +81,18 @@ fn full_pipeline_finds_all_requested_patterns() {
             "FE063", // bounded
             "FE063", // password
             "FE063", // api_key
-            "FE063", // secret
             "FE063", // unused
             "FE064", // unused constant
             "FE080", // nested regex quantifier
             "FE081", // suspicious regex
+            "FE081", // suspicious regex
+            "FE082", // dynamic regex construction
+            "FE083", // unanchored validation regex
+            "FE100", // command execution presence (ls)
+            "FE100", // command execution presence (sh)
+            "FE101", // shell string injection
+            "FE120", // path traversal literal
+            "FE121", // unsanitized path input
         ]
     );
 
@@ -86,7 +105,7 @@ fn config_disables_categories_and_rules() {
     std::fs::write(dir.join("fixture.rs"), FIXTURE).unwrap();
 
     let config = Config::parse(
-        "[rulesets]\ndebug = false\nsecrets = false\nlint = false\nregex = false\n[rules]\nFE004 = true\n",
+        "[rulesets]\ndebug = false\nsecrets = false\nlint = false\nregex = false\nshell = false\npath = false\n[rules]\nFE004 = true\n",
     )
     .unwrap();
 

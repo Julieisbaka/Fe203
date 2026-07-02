@@ -35,17 +35,31 @@ pub fn run(args: &[String]) -> i32 {
 
     let registry = rules::all_rules();
 
-    if opts.list_rules {
-        println!("{:<10} {:<9} {:<8} NAME", "ID", "CATEGORY", "SEVERITY");
-        for rule in &registry {
-            println!(
-                "{:<10} {:<9} {:<8} {}",
-                rule.id(),
-                rule.category().name(),
-                rule.severity().name(),
-                rule.name()
-            );
+    if let Some(path) = &opts.init_config {
+        let template = Config::template_from_workspace(&std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+        if path.exists() {
+            eprintln!("error: template target already exists: {}", path.display());
+            return 2;
         }
+        if let Err(err) = std::fs::write(path, template) {
+            eprintln!("error: cannot write template {}: {err}", path.display());
+            return 2;
+        }
+        println!("generated {}", path.display());
+        return 0;
+    }
+
+    if let Some(rule_id) = &opts.explain {
+        if let Some(rule) = rules::rule_by_id(&registry, rule_id) {
+            print!("{}", rules::render_rule_explanation(rule));
+            return 0;
+        }
+        eprintln!("error: unknown rule ID: {rule_id}");
+        return 2;
+    }
+
+    if opts.list_rules {
+        print!("{}", rules::render_rule_index(&registry));
         return 0;
     }
 

@@ -1,4 +1,5 @@
 //! Output rendering: human-readable console report and JSON.
+// fe203-ignore-file FE001
 
 use crate::finding::Finding;
 

@@ -7,8 +7,10 @@
 
 pub mod debug_code;
 pub mod lint;
+pub mod path_safety;
 pub mod regex_checks;
 pub mod secrets;
+pub mod shell;
 pub mod unsafe_usage;
 
 use std::path::Path;
@@ -74,7 +76,118 @@ pub fn all_rules() -> Vec<Box<dyn Rule>> {
     rules.extend(secrets::rules());
     rules.extend(lint::rules());
     rules.extend(regex_checks::rules());
+    rules.extend(shell::rules());
+    rules.extend(path_safety::rules());
     rules
+}
+
+/// Finds a built-in rule by ID.
+pub fn rule_by_id<'a>(rules: &'a [Box<dyn Rule>], id: &str) -> Option<&'a dyn Rule> {
+    rules.iter().map(|rule| rule.as_ref()).find(|rule| rule.id() == id)
+}
+
+/// Renders a generated rule index from the registry.
+pub fn render_rule_index(rules: &[Box<dyn Rule>]) -> String {
+    let mut out = String::new();
+    out.push_str("Generated Fe203 rule index\n\n");
+    for rule in rules.iter().map(|rule| rule.as_ref()) {
+        out.push_str(&format!(
+            "{:<6} {:<8} {:<8} {}\n      {}\n",
+            rule.id(),
+            rule.category().name(),
+            rule.severity().name(),
+            rule.name(),
+            rule.description(),
+        ));
+        if let Some(suggestion) = rule.suggestion() {
+            out.push_str(&format!("      help: {}\n", suggestion));
+        }
+        out.push('\n');
+    }
+    out
+}
+
+/// Renders a single rule explanation for `--explain`.
+pub fn render_rule_explanation(rule: &dyn Rule) -> String {
+    let mut out = String::new();
+    out.push_str(&format!("{} — {}\n", rule.id(), rule.name()));
+    out.push_str(&format!("Category: {}\n", rule.category().name()));
+    out.push_str(&format!("Severity: {}\n", rule.severity().name()));
+    out.push_str(&format!("Description: {}\n", rule.description()));
+    if let Some(suggestion) = rule.suggestion() {
+        out.push_str(&format!("Suggestion: {}\n", suggestion));
+    }
+    out
+}
+
+/// Returns true when the current line, the immediately preceding comment
+/// line, or a whole-file `fe203-ignore-file` directive suppresses this rule.
+pub(crate) fn is_rule_ignored(ctx: &FileContext, line_no: usize, rule_id: &str, rule_name: &str, category: Category) -> bool {
+    line_has_ignore(ctx.content.lines().nth(line_no.saturating_sub(1)), rule_id, rule_name, category)
+        || line_has_ignore(ctx.content.lines().nth(line_no.saturating_sub(2)), rule_id, rule_name, category)
+        || content_has_file_ignore(ctx.content, rule_id, rule_name, category)
+}
+
+fn line_has_ignore(line: Option<&str>, rule_id: &str, rule_name: &str, category: Category) -> bool {
+    let Some(line) = line else {
+        return false;
+    };
+    let Some(comment) = extract_comment_text(line) else {
+        return false;
+    };
+    let Some(rest) = comment.split_once("fe203-ignore") else {
+        return false;
+    };
+    // A `fe203-ignore-file` directive is handled separately; don't also
+    // treat it as a line-level ignore for whatever tokens follow `-file`.
+    if rest.1.starts_with("-file") {
+        return false;
+    }
+    ignore_tokens_match(rest.1, rule_id, rule_name, category)
+}
+
+/// Returns true if `content` contains a `fe203-ignore-file` directive
+/// (anywhere, in any comment) matching the rule.
+fn content_has_file_ignore(content: &str, rule_id: &str, rule_name: &str, category: Category) -> bool {
+    for line in content.lines() {
+        let Some(comment) = extract_comment_text(line) else {
+            continue;
+        };
+        let Some(rest) = comment.split_once("fe203-ignore-file") else {
+            continue;
+        };
+        if ignore_tokens_match(rest.1, rule_id, rule_name, category) {
+            return true;
+        }
+    }
+    false
+}
+
+fn ignore_tokens_match(rest: &str, rule_id: &str, rule_name: &str, category: Category) -> bool {
+    rest.split(|c: char| c == ',' || c.is_whitespace())
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .any(|item| {
+            item.eq_ignore_ascii_case("all")
+                || item.eq_ignore_ascii_case(rule_id)
+                || item.eq_ignore_ascii_case(rule_name)
+                || item.eq_ignore_ascii_case(category.name())
+        })
+}
+
+fn extract_comment_text(line: &str) -> Option<&str> {
+    let trimmed = line.trim_start();
+    if let Some(pos) = trimmed.find("//") {
+        return Some(&trimmed[pos + 2..]);
+    }
+    if let Some(start) = trimmed.find("/*") {
+        let rest = &trimmed[start + 2..];
+        if let Some(end) = rest.find("*/") {
+            return Some(&rest[..end]);
+        }
+        return Some(rest);
+    }
+    None
 }
 
 /// True if the byte at `idx` starts a whole-word occurrence of `word`

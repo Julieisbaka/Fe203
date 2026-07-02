@@ -1,8 +1,9 @@
 //! Simple hardcoded-secret rules: assignments of string literals to
 //! password/api-key/secret-like identifiers.
+// fe203-ignore-file FE040, FE041, FE042
 
 use crate::finding::{Category, Finding, Severity};
-use crate::rules::{FileContext, Rule};
+use crate::rules::{is_rule_ignored, FileContext, Rule};
 
 /// Detects `<identifier containing keyword> = "non-empty literal"`.
 pub struct SecretAssignmentRule {
@@ -70,6 +71,9 @@ impl Rule for SecretAssignmentRule {
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
         for (line_no, line) in ctx.lines() {
+            if is_rule_ignored(ctx, line_no, self.id(), self.name(), self.category()) {
+                continue;
+            }
             let Some(eq) = assignment_eq_index(line) else {
                 continue;
             };
@@ -151,6 +155,12 @@ mod tests {
     #[test]
     fn ignores_unrelated_assignments() {
         let findings = scan_all("let name = \"fe203\";\n");
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn respects_ignore_comments() {
+        let findings = scan_all("// fe203-ignore FE040\nlet password = \"hunter2\";\n");
         assert!(findings.is_empty());
     }
 }

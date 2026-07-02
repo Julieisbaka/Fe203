@@ -1,4 +1,5 @@
 //! File discovery and scan orchestration.
+// fe203-ignore-file FE001, FE020
 
 use std::path::{Path, PathBuf};
 
@@ -14,10 +15,10 @@ pub fn discover_files(root: &Path, exclude: &[String], include: &[String], out: 
         out.push(root.to_path_buf());
         return;
     }
-    walk(root, exclude, include, out);
+    walk(root, root, exclude, include, out);
 }
 
-fn walk(dir: &Path, exclude: &[String], include: &[String], out: &mut Vec<PathBuf>) {
+fn walk(dir: &Path, root: &Path, exclude: &[String], include: &[String], out: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
@@ -25,16 +26,12 @@ fn walk(dir: &Path, exclude: &[String], include: &[String], out: &mut Vec<PathBu
     paths.sort();
 
     for path in paths {
-        let name = path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_default();
-        if exclude.iter().any(|e| e == &name) {
+        if matches_any_pattern(&path, root, exclude) {
             continue;
         }
         if path.is_dir() {
-            walk(&path, exclude, include, out);
-        } else if path.extension().is_some_and(|ext| ext == "rs") || include.iter().any(|e| e == &name) {
+            walk(&path, root, exclude, include, out);
+        } else if path.extension().is_some_and(|ext| ext == "rs") || matches_any_pattern(&path, root, include) {
             out.push(path);
         }
     }
@@ -127,4 +124,149 @@ mod tests {
         assert!(files.iter().any(|path| path.ends_with("build.rs") || path.ends_with("build.rs")));
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn glob_patterns_match_common_gitignore_entries() {
+        let dir = temp_dir("glob");
+        std::fs::create_dir_all(dir.join("nested/debug")).unwrap();
+        std::fs::write(dir.join("nested/debug/file.pdb"), "x").unwrap();
+        std::fs::write(dir.join("nested/debug/cache.rs.bk"), "x").unwrap();
+
+        let mut files = Vec::new();
+        discover_files(&dir, &["debug".to_string(), "*.pdb".to_string(), "**/*.rs.bk".to_string()], &[], &mut files);
+        assert!(files.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn does_not_match_partial_directory_names() {
+        let dir = temp_dir("partial");
+        std::fs::create_dir_all(dir.join("mytarget")).unwrap();
+        std::fs::write(dir.join("mytarget/keep.rs"), "fn keep() {}\n").unwrap();
+
+        let mut files = Vec::new();
+        discover_files(&dir, &["target".to_string()], &[], &mut files);
+
+        assert_eq!(files.len(), 1);
+        assert!(files[0].ends_with("mytarget/keep.rs") || files[0].ends_with("mytarget\\keep.rs"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+fn matches_any_pattern(path: &Path, root: &Path, patterns: &[String]) -> bool {
+    patterns.iter().any(|pattern| matches_pattern(path, root, pattern))
+}
+
+fn matches_pattern(path: &Path, root: &Path, pattern: &str) -> bool {
+    let normalized = path.to_string_lossy().replace('\\', "/");
+    let basename = path
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let cleaned = pattern.trim().trim_start_matches("./").trim_end_matches('/');
+    if cleaned.is_empty() {
+        return false;
+    }
+    if !cleaned.contains('*') && !cleaned.contains('?') && !cleaned.contains('/') {
+        return normalized.split('/').any(|part| part == cleaned) || basename == cleaned;
+    }
+    if !cleaned.contains('/') {
+        return glob_match_segment(cleaned, &basename);
+    }
+    // Slash-containing patterns are resolved relative to the scan root first
+    // (standard gitignore-like semantics), falling back to matching against
+    // the full path for backward compatibility.
+    if let Some(relative) = path.strip_prefix(root).ok().map(|p| p.to_string_lossy().replace('\\', "/")) {
+        if relative == cleaned
+            || relative.ends_with(&format!("/{cleaned}"))
+            || glob_match_path(cleaned, &relative)
+        {
+            return true;
+        }
+    }
+    normalized == cleaned
+        || normalized.ends_with(&format!("/{cleaned}"))
+        || glob_match_path(cleaned, &normalized)
+}
+
+fn glob_match_segment(pattern: &str, text: &str) -> bool {
+    let pattern_bytes = pattern.as_bytes();
+    let text_bytes = text.as_bytes();
+    let mut pattern_index = 0;
+    let mut text_index = 0;
+    let mut star_index = None;
+    let mut text_after_star = 0;
+
+    while text_index < text_bytes.len() {
+        if pattern_index < pattern_bytes.len()
+            && pattern_bytes[pattern_index] != b'*'
+            && pattern_bytes[pattern_index] != b'?'
+            && pattern_bytes[pattern_index] == text_bytes[text_index]
+        {
+            pattern_index += 1;
+            text_index += 1;
+        } else if pattern_index < pattern_bytes.len() && pattern_bytes[pattern_index] == b'?' {
+            if text_bytes[text_index] == b'/' {
+                return false;
+            }
+            pattern_index += 1;
+            text_index += 1;
+        } else if pattern_index < pattern_bytes.len() && pattern_bytes[pattern_index] == b'*' {
+            star_index = Some(pattern_index);
+            pattern_index += 1;
+            text_after_star = text_index;
+        } else if let Some(star) = star_index {
+            if text_bytes[text_after_star] == b'/' {
+                return false;
+            }
+            text_after_star += 1;
+            text_index = text_after_star;
+            pattern_index = star + 1;
+        } else {
+            return false;
+        }
+    }
+
+    while pattern_index < pattern_bytes.len() && pattern_bytes[pattern_index] == b'*' {
+        pattern_index += 1;
+    }
+
+    pattern_index == pattern_bytes.len()
+}
+
+fn glob_match_path(pattern: &str, text: &str) -> bool {
+    let pattern_segments: Vec<&str> = pattern.split('/').filter(|segment| !segment.is_empty()).collect();
+    let text_segments: Vec<&str> = text.split('/').filter(|segment| !segment.is_empty()).collect();
+    let mut memo = vec![vec![None; text_segments.len() + 1]; pattern_segments.len() + 1];
+
+    fn inner(
+        pattern_segments: &[&str],
+        text_segments: &[&str],
+        pattern_index: usize,
+        text_index: usize,
+        memo: &mut [Vec<Option<bool>>],
+    ) -> bool {
+        if let Some(result) = memo[pattern_index][text_index] {
+            return result;
+        }
+
+        let result = if pattern_index == pattern_segments.len() {
+            text_index == text_segments.len()
+        } else if pattern_segments[pattern_index] == "**" {
+            inner(pattern_segments, text_segments, pattern_index + 1, text_index, memo)
+                || (text_index < text_segments.len()
+                    && inner(pattern_segments, text_segments, pattern_index, text_index + 1, memo))
+        } else if text_index < text_segments.len()
+            && glob_match_segment(pattern_segments[pattern_index], text_segments[text_index])
+        {
+            inner(pattern_segments, text_segments, pattern_index + 1, text_index + 1, memo)
+        } else {
+            false
+        };
+
+        memo[pattern_index][text_index] = Some(result);
+        result
+    }
+
+    inner(&pattern_segments, &text_segments, 0, 0, &mut memo)
 }

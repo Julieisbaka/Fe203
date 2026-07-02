@@ -1,4 +1,5 @@
 //! Minimal std-only CLI argument parsing.
+// fe203-ignore-file FE020
 
 use std::path::PathBuf;
 
@@ -16,7 +17,9 @@ ARGS:
 OPTIONS:
     -c, --config <FILE>        Config file to use (default: ./fe203.toml if present)
         --rules <ID,ID>        Only run these rule IDs (e.g. FE001,FE004)
-        --categories <A,B>     Only run these categories (debug, unsafe, secrets, lint, regex)
+        --categories <A,B>     Only run these categories (debug, unsafe, secrets, lint, regex, shell, path)
+        --explain <ID>         Show a detailed explanation for one rule (e.g. FE080)
+        --init-config [FILE]   Generate a fe203.toml template file (default: ./fe203.toml)
         --json                 Emit findings as JSON
         --list-rules           List all available rules and exit
     -h, --help                 Print help
@@ -33,6 +36,8 @@ pub struct CliOptions {
     pub config: Option<PathBuf>,
     pub json: bool,
     pub list_rules: bool,
+    pub explain: Option<String>,
+    pub init_config: Option<PathBuf>,
     pub help: bool,
     pub version: bool,
     /// Uppercased rule IDs, if `--rules` was given.
@@ -68,6 +73,24 @@ pub fn parse(args: &[String]) -> Result<CliOptions, String> {
             "-V" | "--version" => opts.version = true,
             "--json" => opts.json = true,
             "--list-rules" => opts.list_rules = true,
+            "--explain" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| format!("{arg} requires a rule ID"))?;
+                opts.explain = Some(value.to_uppercase());
+            }
+            "--init-config" => {
+                let default_path = PathBuf::from("fe203.toml");
+                let next = iter.clone().next();
+                if let Some(value) = next {
+                    if !value.starts_with('-') {
+                        let value = iter.next().expect("iterator advanced after clone check");
+                        opts.init_config = Some(PathBuf::from(value));
+                        continue;
+                    }
+                }
+                opts.init_config = Some(default_path);
+            }
             "-c" | "--config" => {
                 let value = iter
                     .next()
@@ -145,5 +168,13 @@ mod tests {
         let rules = all_rules();
         let todo = rules.iter().find(|r| r.id() == "FE001").unwrap();
         assert!(opts.allows_rule(todo.as_ref()));
+    }
+
+    #[test]
+    fn parses_explain_and_init_config() {
+        let args: Vec<String> = ["--explain", "fe080", "--init-config"].iter().map(|s| s.to_string()).collect();
+        let opts = parse(&args).unwrap();
+        assert_eq!(opts.explain, Some("FE080".to_string()));
+        assert_eq!(opts.init_config, Some(PathBuf::from("fe203.toml")));
     }
 }

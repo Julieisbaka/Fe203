@@ -1,4 +1,5 @@
 //! Shared finding model: what a rule reports when it matches.
+// fe203-ignore-file FE020
 
 use std::fmt;
 use std::path::PathBuf;
@@ -37,6 +38,8 @@ pub enum Category {
     Secrets,
     Lint,
     Regex,
+    Shell,
+    Path,
 }
 
 impl Category {
@@ -47,6 +50,8 @@ impl Category {
             Category::Secrets => "secrets",
             Category::Lint => "lint",
             Category::Regex => "regex",
+            Category::Shell => "shell",
+            Category::Path => "path",
         }
     }
 
@@ -57,6 +62,8 @@ impl Category {
             "secrets" => Some(Category::Secrets),
             "lint" => Some(Category::Lint),
             "regex" => Some(Category::Regex),
+            "shell" => Some(Category::Shell),
+            "path" => Some(Category::Path),
             _ => None,
         }
     }

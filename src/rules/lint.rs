@@ -1,8 +1,11 @@
 //! General lint-style rules: clamp-like expressions, unused bindings,
 //! and empty comments/docs.
+// fe203-ignore-file FE060, FE061, FE062
+
+use std::collections::HashSet;
 
 use crate::finding::{Category, Finding, Severity};
-use crate::rules::{FileContext, Rule};
+use crate::rules::{is_rule_ignored, FileContext, Rule};
 
 /// Detects manual clamp chains like `value.max(min).min(max)`.
 pub struct ClampLikePatternRule;
@@ -34,23 +37,34 @@ impl Rule for ClampLikePatternRule {
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
-        for (line_no, line) in ctx.lines() {
-            let max_then_min = line.find(".max(").zip(line.find(").min("));
-            let min_then_max = line.find(".min(").zip(line.find(").max("));
-            let pos = match (max_then_min, min_then_max) {
-                (Some((start, end)), _) if start < end => Some(start),
-                (_, Some((start, end))) if start < end => Some(start),
-                _ => None,
-            };
-
-            if let Some(column) = pos {
-                findings.push(self.finding(
-                    ctx,
-                    line_no,
-                    column + 1,
-                    "manual clamp-like min/max chain found".to_string(),
-                    line,
-                ));
+        let mut seen = HashSet::new();
+        for (start_pat, end_pat) in [(".max(", ".min("), (".min(", ".max(")] {
+            let mut search_start = 0;
+            while let Some(start_rel) = ctx.content[search_start..].find(start_pat) {
+                let start_idx = search_start + start_rel;
+                let window_end = (start_idx + 240).min(ctx.content.len());
+                let window = &ctx.content[start_idx + start_pat.len()..window_end];
+                if let Some(end_rel) = window.find(end_pat) {
+                    let end_idx = start_idx + start_pat.len() + end_rel;
+                    if seen.insert((start_idx, end_idx)) {
+                        let (line_no, column) = line_col_at(ctx.content, start_idx);
+                        if is_rule_ignored(ctx, line_no, self.id(), self.name(), self.category()) {
+                            search_start = start_idx + start_pat.len();
+                            continue;
+                        }
+                        let snippet = snippet_for_range(ctx.content, start_idx, end_idx + end_pat.len());
+                        findings.push(self.finding(
+                            ctx,
+                            line_no,
+                            column,
+                            "manual clamp-like min/max chain found".to_string(),
+                            &snippet,
+                        ));
+                    }
+                    search_start = start_idx + start_pat.len();
+                } else {
+                    search_start = start_idx + start_pat.len();
+                }
             }
         }
         findings
@@ -88,9 +102,12 @@ impl Rule for EmptyDocCommentRule {
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
         for (line_no, line) in ctx.lines() {
+            if is_rule_ignored(ctx, line_no, self.id(), self.name(), self.category()) {
+                continue;
+            }
             let trimmed = line.trim_start();
             let empty = trimmed == "///" || trimmed == "//!";
-            if empty {
+            if empty && !has_adjacent_doc_comment(ctx.content, line_no, trimmed) {
                 let column = line.len() - trimmed.len() + 1;
                 findings.push(self.finding(
                     ctx,
@@ -136,6 +153,9 @@ impl Rule for EmptyCommentRule {
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
         for (line_no, line) in ctx.lines() {
+            if is_rule_ignored(ctx, line_no, self.id(), self.name(), self.category()) {
+                continue;
+            }
             let trimmed = line.trim_start();
             let compact: String = trimmed.chars().filter(|c| !c.is_whitespace()).collect();
             let is_empty_comment = trimmed == "//" || compact == "/**/";
@@ -186,6 +206,9 @@ impl Rule for UnusedVariableRule {
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
         for (line_no, line) in ctx.lines() {
+            if is_rule_ignored(ctx, line_no, self.id(), self.name(), self.category()) {
+                continue;
+            }
             if let Some(name) = parse_let_binding_name(line) {
                 if is_used_once_in_content(ctx.content, &name) {
                     if let Some(column) = line.find(&name).map(|idx| idx + 1) {
@@ -235,6 +258,9 @@ impl Rule for UnusedConstantRule {
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
         for (line_no, line) in ctx.lines() {
+            if is_rule_ignored(ctx, line_no, self.id(), self.name(), self.category()) {
+                continue;
+            }
             if let Some(name) = parse_const_name(line) {
                 if is_used_once_in_content(ctx.content, &name) {
                     if let Some(column) = line.find(&name).map(|idx| idx + 1) {
@@ -262,6 +288,36 @@ pub fn rules() -> Vec<Box<dyn Rule>> {
         Box::new(UnusedVariableRule),
         Box::new(UnusedConstantRule),
     ]
+}
+
+/// True if the doc-comment line before or after `line_no` uses the same
+/// prefix (`///` or `//!`) with real content, meaning this blank line is an
+/// intentional paragraph break inside a larger doc-comment block rather
+/// than a truly orphaned empty doc comment.
+fn has_adjacent_doc_comment(content: &str, line_no: usize, prefix: &str) -> bool {
+    let prev = if line_no >= 2 {
+        content.lines().nth(line_no - 2).unwrap_or("").trim_start()
+    } else {
+        ""
+    };
+    let next = content.lines().nth(line_no).unwrap_or("").trim_start();
+    prev.starts_with(prefix) || next.starts_with(prefix)
+}
+
+fn line_col_at(content: &str, idx: usize) -> (usize, usize) {
+    let prefix = &content[..idx];
+    let line = prefix.bytes().filter(|byte| *byte == b'\n').count() + 1;
+    let column = prefix
+        .rfind('\n')
+        .map(|pos| prefix[pos + 1..].chars().count() + 1)
+        .unwrap_or_else(|| prefix.chars().count() + 1);
+    (line, column)
+}
+
+fn snippet_for_range(content: &str, start: usize, end: usize) -> String {
+    let start = start.saturating_sub(20);
+    let end = (end + 20).min(content.len());
+    content[start..end].trim().replace('\n', " ")
 }
 
 fn parse_let_binding_name(line: &str) -> Option<String> {
@@ -347,6 +403,13 @@ mod tests {
     }
 
     #[test]
+    fn detects_multiline_clamp_chain() {
+        let findings = scan_all("value\n    .max(min)\n    .min(max);\n");
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule_id, "FE060");
+    }
+
+    #[test]
     fn detects_empty_doc_comments_and_empty_comments() {
         let findings = scan_all("///\n//!\n//\n/* */\n");
         let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
@@ -373,5 +436,24 @@ mod tests {
         let findings = scan_all("fn f() {\n    let unused = 1;\n}\n");
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule_id, "FE063");
+    }
+
+    #[test]
+    fn respects_ignore_comments() {
+        let findings = scan_all("// fe203-ignore FE060\nvalue.max(min).min(max);\n");
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn ignores_blank_doc_line_used_as_paragraph_break() {
+        let findings = scan_all("//! Summary line.\n//!\n");
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn flags_truly_isolated_empty_doc_comment() {
+        let findings = scan_all("///\nfn f() {}\n");
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule_id, "FE061");
     }
 }

@@ -121,6 +121,31 @@ impl Config {
 
         Ok(config)
     }
+
+    /// Generates a fe203.toml template by copying safe exclusions from a
+    /// workspace `.gitignore` if present.
+    pub fn template_from_workspace(root: &Path) -> String {
+        let mut exclude = default_excludes();
+        if let Ok(text) = std::fs::read_to_string(root.join(".gitignore")) {
+            exclude.extend(parse_gitignore_entries(&text));
+        }
+        dedup_strings(&mut exclude);
+
+        let mut out = String::new();
+        out.push_str("# Generated Fe203 configuration template\n");
+        out.push_str("# Generated from your workspace .gitignore when available.\n\n");
+        out.push_str("[rulesets]\n");
+        out.push_str("debug = true\nunsafe = true\nsecrets = true\nlint = true\nregex = true\nshell = true\npath = true\n\n");
+        out.push_str("[rules]\n");
+        out.push_str("# FE003 = false   # allow ");
+        // fe203-ignore FE003
+        out.push_str("dbg!");
+        out.push_str("()\n\n");
+        out.push_str("[paths]\n");
+        out.push_str(&format!("exclude = [{}]\n", join_string_list(&exclude)));
+        out.push_str("include = [\"Cargo.toml\"]\n");
+        out
+    }
 }
 
 fn parse_bool(value: &str) -> Option<bool> {
@@ -143,6 +168,45 @@ fn parse_string_array(value: &str) -> Option<Vec<String>> {
         out.push(s.to_string());
     }
     Some(out)
+}
+
+fn default_excludes() -> Vec<String> {
+    vec![
+        "target".to_string(),
+        "debug".to_string(),
+        "*.pdb".to_string(),
+        "**/*.rs.bk".to_string(),
+        "**/mutants.out*/".to_string(),
+        ".idea/".to_string(),
+    ]
+}
+
+fn parse_gitignore_entries(text: &str) -> Vec<String> {
+    let mut entries = Vec::new();
+    for raw in text.lines() {
+        let line = strip_comment(raw).trim();
+        if line.is_empty() || line.starts_with('!') {
+            continue;
+        }
+        let trimmed = line.trim_start_matches("./").trim_start_matches('/').trim_end_matches('/');
+        if !trimmed.is_empty() {
+            entries.push(trimmed.to_string());
+        }
+    }
+    entries
+}
+
+fn join_string_list(items: &[String]) -> String {
+    items
+        .iter()
+        .map(|item| format!("\"{}\"", item))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn dedup_strings(items: &mut Vec<String>) {
+    items.sort();
+    items.dedup();
 }
 
 /// Removes a trailing `# comment`, respecting quoted strings.
@@ -206,5 +270,21 @@ mod tests {
     #[test]
     fn rejects_unknown_section() {
         assert!(Config::parse("[nope]\nx = true\n").is_err());
+    }
+
+    #[test]
+    fn generates_template_from_gitignore() {
+        let dir = std::env::temp_dir().join(format!("fe203-template-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(".gitignore"), "target\n*.cache\n# comment\n!keep\n").unwrap();
+
+        let template = Config::template_from_workspace(&dir);
+        assert!(template.contains("include = [\"Cargo.toml\"]"));
+        assert!(template.contains("target"));
+        assert!(template.contains("*.cache"));
+        assert!(!template.contains("keep"));
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

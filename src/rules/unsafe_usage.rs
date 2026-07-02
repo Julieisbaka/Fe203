@@ -1,7 +1,8 @@
 //! Unsafe-usage rules: `unsafe` blocks/exprs and `unsafe fn` declarations.
+// fe203-ignore-file FE020
 
 use crate::finding::{Category, Finding, Severity};
-use crate::rules::{is_comment_line, word_occurrences, FileContext, Rule};
+use crate::rules::{is_comment_line, is_rule_ignored, word_occurrences, FileContext, Rule};
 
 /// Whether the `unsafe` keyword at `idx` is followed by `fn`.
 fn is_unsafe_fn(line: &str, idx: usize) -> bool {
@@ -36,6 +37,9 @@ impl Rule for UnsafeUsageRule {
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
         for (line_no, line) in ctx.lines() {
+            if is_rule_ignored(ctx, line_no, self.id(), self.name(), self.category()) {
+                continue;
+            }
             if is_comment_line(line) {
                 continue;
             }
@@ -81,6 +85,9 @@ impl Rule for UnsafeFnRule {
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
         for (line_no, line) in ctx.lines() {
+            if is_rule_ignored(ctx, line_no, self.id(), self.name(), self.category()) {
+                continue;
+            }
             if is_comment_line(line) {
                 continue;
             }
@@ -125,6 +132,7 @@ mod tests {
 
     #[test]
     fn detects_unsafe_fn_separately() {
+        // fe203-ignore FE021
         let findings = scan_all("pub unsafe fn danger() {}\n");
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule_id, "FE021");
@@ -132,7 +140,14 @@ mod tests {
 
     #[test]
     fn ignores_comments_and_identifiers() {
+        // fe203-ignore FE021
         let findings = scan_all("// unsafe fn in a comment\nlet not_unsafe_here = 1;\n");
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn respects_ignore_comments() {
+        let findings = scan_all("// fe203-ignore FE020\nunsafe { do_thing() }\n");
         assert!(findings.is_empty());
     }
 }

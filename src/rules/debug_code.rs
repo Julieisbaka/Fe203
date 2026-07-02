@@ -1,7 +1,8 @@
 //! Debug / unfinished-code rules: `todo!`, `unimplemented!`, `dbg!`, `panic!`.
+// fe203-ignore-file FE001, FE002, FE003, FE004
 
 use crate::finding::{Category, Finding, Severity};
-use crate::rules::{is_comment_line, word_occurrences, FileContext, Rule};
+use crate::rules::{is_comment_line, is_rule_ignored, word_occurrences, FileContext, Rule};
 
 /// Detects invocations of a specific macro, e.g. `todo!(...)`.
 pub struct MacroRule {
@@ -42,6 +43,9 @@ impl Rule for MacroRule {
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
         for (line_no, line) in ctx.lines() {
+            if is_rule_ignored(ctx, line_no, self.id(), self.name(), self.category()) {
+                continue;
+            }
             if is_comment_line(line) {
                 continue;
             }
@@ -131,5 +135,11 @@ mod tests {
         let findings = scan_all("core::panic!(\"x\");\n");
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule_id, "FE004");
+    }
+
+    #[test]
+    fn respects_ignore_comments() {
+        let findings = scan_all("// fe203-ignore FE001\ntodo!();\n");
+        assert!(findings.is_empty());
     }
 }
