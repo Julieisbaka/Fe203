@@ -16,6 +16,8 @@ pub struct CliOptions {
     pub init_baseline: Option<PathBuf>,
     pub check_syntax: bool,
     pub max: bool,
+    /// Iteration count when benchmarking is enabled via --benchmark.
+    pub benchmark_iterations: Option<usize>,
     pub help: bool,
     pub version: bool,
     /// Uppercased rule IDs, if `--rules` was given.
@@ -55,6 +57,38 @@ pub fn parse(args: &[String]) -> Result<CliOptions, String> {
             "-l" | "--list-rules" => opts.list_rules = true,
             "--check-syntax" => opts.check_syntax = true,
             "--max" => opts.max = true,
+            "--benchmark" => {
+                let mut iterations = 5usize;
+                if let Some(value) = iter.clone().next() {
+                    if !value.starts_with('-') {
+                        if let Ok(parsed) = value.parse::<usize>() {
+                            if parsed > 0 {
+                                iterations = parsed;
+                                let _ = iter.next();
+                            }
+                        }
+                    }
+                }
+                opts.benchmark_iterations = Some(iterations);
+            }
+            other if other.starts_with("--benchmark=") => {
+                let value = other
+                    .split_once('=')
+                    .map(|(_, v)| v)
+                    .unwrap_or_default()
+                    .trim();
+                if value.is_empty() {
+                    return Err("--benchmark requires a positive iteration count when using ="
+                        .to_string());
+                }
+                let parsed = value
+                    .parse::<usize>()
+                    .map_err(|_| "--benchmark requires a positive integer".to_string())?;
+                if parsed == 0 {
+                    return Err("--benchmark requires a positive integer".to_string());
+                }
+                opts.benchmark_iterations = Some(parsed);
+            }
             "-x" | "--explain" => {
                 let value = iter
                     .next()
@@ -310,6 +344,30 @@ mod tests {
         assert_eq!(opts.baseline, Some(PathBuf::from("base.txt")));
         assert_eq!(opts.init_config, Some(PathBuf::from("starter.toml")));
         assert_eq!(opts.init_baseline, Some(PathBuf::from("seed.baseline")));
+    }
+
+    #[test]
+    fn parses_benchmark_default_and_value_forms() {
+        let args_default: Vec<String> = ["--benchmark", "src"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let opts_default = parse(&args_default).unwrap();
+        assert_eq!(opts_default.benchmark_iterations, Some(5));
+
+        let args_value: Vec<String> = ["--benchmark", "9", "src"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let opts_value = parse(&args_value).unwrap();
+        assert_eq!(opts_value.benchmark_iterations, Some(9));
+
+        let args_equals: Vec<String> = ["--benchmark=3", "src"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let opts_equals = parse(&args_equals).unwrap();
+        assert_eq!(opts_equals.benchmark_iterations, Some(3));
     }
 
     #[test]

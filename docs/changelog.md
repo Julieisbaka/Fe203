@@ -6,7 +6,7 @@
 - Reused a single rule-ID lookup map across chunk scans to reduce repeated setup overhead.
 - Removed cache-hit cloning of cached finding vectors by reading cached entries by reference.
 - Reduced repeated environment checks in scan orchestration (`FE203_NO_CACHE` now evaluated once per run).
-- Added a built-in benchmark harness (`cargo run --bin bench_cli`) with fixture workload files under `benchmarks/fixtures/workload`.
+- Added built-in CLI benchmark mode via `fe203 --benchmark [N] <TARGET>` and removed the separate benchmark binary.
 
 ## `0.1.1`
 

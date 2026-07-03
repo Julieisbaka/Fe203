@@ -139,6 +139,22 @@ Runs Fe203 in maximum validation mode before scanning:
 
 `--max` is useful for strict CI checks or deep local validation sweeps.
 
+## `--benchmark [N]`
+
+Runs the CLI repeatedly against a target folder and reports timing stats.
+
+- `N` is optional and defaults to `5`
+- benchmark mode requires a target path argument
+- each iteration runs one full CLI scan of the target folder
+- benchmark child runs suppress normal scan output and only timing stats are printed
+
+Examples:
+
+```sh
+fe203 --benchmark benchmarks/workload
+fe203 --benchmark 10 benchmarks/workload
+```
+
 ## Scan Pipeline Notes
 
 Fe203 builds a per-file scan index and uses cheap rule signatures to skip rule

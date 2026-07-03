@@ -1,4 +1,6 @@
 use std::path::PathBuf;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 use crate::config::Config;
 use crate::rules::Rule;
@@ -80,6 +82,14 @@ pub fn run(args: &[String]) -> i32 {
     if opts.list_rules {
         print!("{}", rules::render_rule_index(&registry));
         return 0;
+    }
+
+    if let Some(iterations) = opts.benchmark_iterations {
+        if opts.paths.is_empty() {
+            eprintln!("error: --benchmark requires a target folder path");
+            return 2;
+        }
+        return run_benchmark_mode(args, iterations);
     }
 
     let config = match load_config(&opts) {
@@ -197,6 +207,130 @@ pub fn run(args: &[String]) -> i32 {
     }
 }
 
+fn run_benchmark_mode(args: &[String], iterations: usize) -> i32 {
+    let benchmark_args = strip_benchmark_args(args);
+    let target = benchmark_args
+        .iter()
+        .find(|arg| !arg.starts_with('-'))
+        .cloned()
+        .unwrap_or_else(|| "<unknown>".to_string());
+
+    let exe = match std::env::current_exe() {
+        Ok(path) => path,
+        Err(err) => {
+            eprintln!("error: cannot resolve current executable path: {err}");
+            return 2;
+        }
+    };
+
+    println!("fe203 benchmark mode");
+    println!("target: {target}");
+    println!("iterations: {iterations}");
+
+    let mut times = Vec::with_capacity(iterations);
+    for idx in 0..iterations {
+        let start = Instant::now();
+        let status = match Command::new(&exe)
+            .args(&benchmark_args)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+        {
+            Ok(status) => status,
+            Err(err) => {
+                eprintln!("error: benchmark iteration {} failed to start: {err}", idx + 1);
+                return 2;
+            }
+        };
+
+        if !status.success() && status.code() != Some(1) {
+            eprintln!(
+                "error: benchmark iteration {} failed with exit code {:?}",
+                idx + 1,
+                status.code()
+            );
+            return 2;
+        }
+
+        let elapsed = start.elapsed();
+        times.push(elapsed);
+        println!("run {:>2}: {}", idx + 1, format_benchmark_duration(elapsed));
+    }
+
+    let summary = summarize_times(&times);
+    println!("\nsummary");
+    println!("min:    {}", format_benchmark_duration(summary.min));
+    println!("max:    {}", format_benchmark_duration(summary.max));
+    println!("mean:   {}", format_benchmark_duration(summary.mean));
+    println!("median: {}", format_benchmark_duration(summary.median));
+    0
+}
+
+fn strip_benchmark_args(args: &[String]) -> Vec<String> {
+    let mut out = Vec::with_capacity(args.len());
+    let mut idx = 0usize;
+
+    while idx < args.len() {
+        let arg = &args[idx];
+        if arg == "--benchmark" {
+            idx += 1;
+            if idx < args.len()
+                && !args[idx].starts_with('-')
+                && args[idx].parse::<usize>().ok().is_some_and(|v| v > 0)
+            {
+                idx += 1;
+            }
+            continue;
+        }
+        if arg.starts_with("--benchmark=") {
+            idx += 1;
+            continue;
+        }
+
+        out.push(arg.clone());
+        idx += 1;
+    }
+
+    out
+}
+
+struct BenchmarkStats {
+    min: Duration,
+    max: Duration,
+    mean: Duration,
+    median: Duration,
+}
+
+fn summarize_times(times: &[Duration]) -> BenchmarkStats {
+    let mut sorted = times.to_vec();
+    sorted.sort();
+
+    let min = *sorted.first().unwrap_or(&Duration::from_millis(0));
+    let max = *sorted.last().unwrap_or(&Duration::from_millis(0));
+    let total_secs: f64 = sorted.iter().map(Duration::as_secs_f64).sum();
+    let mean = if sorted.is_empty() {
+        Duration::from_millis(0)
+    } else {
+        Duration::from_secs_f64(total_secs / sorted.len() as f64)
+    };
+    let median = if sorted.is_empty() {
+        Duration::from_millis(0)
+    } else {
+        sorted[sorted.len() / 2]
+    };
+
+    BenchmarkStats {
+        min,
+        max,
+        mean,
+        median,
+    }
+}
+
+fn format_benchmark_duration(value: Duration) -> String {
+    format!("{:.2}ms", value.as_secs_f64() * 1000.0)
+}
+
 fn should_show_intro(args: &[String]) -> bool {
     args.is_empty()
 }
@@ -232,5 +366,19 @@ mod tests {
         assert!(should_show_intro(&no_args));
         assert!(!should_show_intro(&with_path));
         assert!(!should_show_intro(&with_flag));
+    }
+
+    #[test]
+    fn strips_benchmark_args() {
+        let args = vec![
+            "--benchmark".to_string(),
+            "7".to_string(),
+            "src".to_string(),
+            "--json".to_string(),
+        ];
+        assert_eq!(strip_benchmark_args(&args), vec!["src", "--json"]);
+
+        let args_equals = vec!["--benchmark=3".to_string(), "src".to_string()];
+        assert_eq!(strip_benchmark_args(&args_equals), vec!["src"]);
     }
 }

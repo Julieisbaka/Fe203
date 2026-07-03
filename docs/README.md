@@ -9,7 +9,6 @@ This is the documentation index for Fe203, a std-only CLI for scanning and linti
 - [configuration.md](configuration.md) — the `fe203.toml` format, precedence rules, and path-matching semantics.
 - [suppressions.md](suppressions.md) — line-level and file-level `fe203-ignore` comment suppression.
 - [architecture.md](architecture.md) — implementation model, module layout, and known limitations.
-- [roadmap.md](roadmap.md) — suggested next features.
 
 ## Rules
 

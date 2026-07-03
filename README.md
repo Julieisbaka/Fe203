@@ -66,19 +66,19 @@ fe203 --list-rules   # print the built-in rule index
 
 ## Benchmarking
 
-Use the built-in benchmark harness to measure end-to-end CLI scan time against
-the fixture workload in `benchmarks/workload`.
+Use built-in benchmark mode to measure end-to-end CLI scan time against
+the workload folder in `benchmarks/workload`.
 
 Run with defaults (5 measured iterations):
 
 ```sh
-cargo run --bin bench_cli
+fe203 --benchmark benchmarks/workload
 ```
 
 Run against a custom path and iteration count:
 
 ```sh
-cargo run --bin bench_cli -- benchmarks/workload 10
+fe203 --benchmark 10 benchmarks/workload
 ```
 
 The harness prints per-run timing and a summary (`min`, `max`, `mean`,

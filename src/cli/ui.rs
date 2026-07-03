@@ -57,6 +57,10 @@ pub fn usage_text() -> String {
             "--max",
             "Run all rules and automatically run cargo check + cargo test",
         ),
+        (
+            "--benchmark [N]",
+            "Run N benchmark scans against the target folder path (default: 5)",
+        ),
         ("-l, --list-rules", "List all available rules and exit"),
         ("-h, --help", "Print help"),
         ("-V, --version", "Print version"),
