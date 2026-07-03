@@ -2,9 +2,9 @@
 
 Rules covering shell command construction risks.
 
-| ID    | Severity | Name                     | Detects                                                     |
-|-------|----------|--------------------------|-------------------------------------------------------------|
-| FE100 | info     | `command-execution`      | presence of `Command::new(` / `std::process::Command::new(` |
+| ID    | Severity | Name                     | Detects                                                                                                 |
+|-------|----------|--------------------------|---------------------------------------------------------------------------------------------------------|
+| FE100 | info     | `command-execution`      | presence of `Command::new(` / `std::process::Command::new(`                                             |
 | FE101 | high     | `shell-string-injection` | a shell interpreter invoked with a shell flag and a dynamically built or environment-fed command string |
 
 ## FE100 — `command-execution`
@@ -23,7 +23,7 @@ Flags a command builder where:
    `concat!`, `.to_string()`, `push_str`, or string `+` concatenation), or fed
    from environment-derived input.
 
-The rule now follows common multi-line builder chains such as:
+Changed in `0.1.4`: the rule now follows common multi-line builder chains such as:
 
 ```rust
 Command::new("sh")

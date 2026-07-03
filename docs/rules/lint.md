@@ -17,9 +17,9 @@ General code-quality lint rules.
 
 ## Notes
 
-- **FE060** is detected across multi-line method chains, not just when the
+- **FE060**: Changed in `0.0.2`. Detected across multi-line method chains, not just when the
   chain appears on a single line.
-- **FE063** now follows multi-line `let` statements, nested destructuring
+- **FE063**: Changed in `0.1.6`. Now follows multi-line `let` statements, nested destructuring
   patterns, and same-name shadow chains across inner blocks. It is still
   heuristic text analysis, so macro-generated bindings and more complex
   control-flow-sensitive cases can still be missed.

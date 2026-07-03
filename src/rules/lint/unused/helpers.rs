@@ -1,15 +1,15 @@
-use crate::finding::{Category, Finding, Severity};
+use crate::finding::Finding;
 use crate::rules::{count_identifier_uses, is_rule_ignored, FileContext, Rule};
 
-struct Declaration {
-    name: String,
-    line_no: usize,
-    column: usize,
-    start: usize,
-    end: usize,
-    shadow_start: usize,
-    scope_end: usize,
-    snippet: String,
+pub(super) struct Declaration {
+    pub(super) name: String,
+    pub(super) line_no: usize,
+    pub(super) column: usize,
+    pub(super) start: usize,
+    pub(super) end: usize,
+    pub(super) shadow_start: usize,
+    pub(super) scope_end: usize,
+    pub(super) snippet: String,
 }
 
 struct Statement {
@@ -18,125 +18,7 @@ struct Statement {
     text: String,
 }
 
-/// Detects local variables that appear to be declared but never used.
-pub struct UnusedVariableRule;
-
-impl Rule for UnusedVariableRule {
-    fn id(&self) -> &'static str {
-        "FE063"
-    }
-
-    fn name(&self) -> &'static str {
-        "unused-variable"
-    }
-
-    fn description(&self) -> &'static str {
-        "unused variables are a sign of dead code or a missed refactor"
-    }
-
-    fn category(&self) -> Category {
-        Category::Lint
-    }
-
-    fn severity(&self) -> Severity {
-        Severity::Warning
-    }
-
-    fn suggestion(&self) -> Option<&'static str> {
-        Some("Remove the variable or prefix it with an underscore if it is intentionally unused.")
-    }
-    fn suggestion_example(&self) -> Option<&'static str> {
-        Some("before: let value = compute();\nafter: let _value = compute();")
-    }
-
-    fn prefilter_signatures(&self) -> &'static [&'static str] {
-        &["let"]
-    }
-
-    fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
-        let declarations = collect_declarations(ctx.content, parse_let_bindings);
-        declarations
-            .iter()
-            .filter_map(|decl| {
-                if is_rule_ignored(ctx, decl.line_no, self.id(), self.name(), self.category()) {
-                    return None;
-                }
-                if has_usage_after_declaration(ctx.content, decl, &declarations) {
-                    None
-                } else {
-                    Some(self.finding(
-                        ctx,
-                        decl.line_no,
-                        decl.column,
-                        format!("unused variable `{}`", decl.name),
-                        &decl.snippet,
-                    ))
-                }
-            })
-            .collect()
-    }
-}
-
-/// Detects constants that appear to be declared but never used.
-pub struct UnusedConstantRule;
-
-impl Rule for UnusedConstantRule {
-    fn id(&self) -> &'static str {
-        "FE064"
-    }
-
-    fn name(&self) -> &'static str {
-        "unused-constant"
-    }
-
-    fn description(&self) -> &'static str {
-        "unused constants often indicate dead code or stale configuration"
-    }
-
-    fn category(&self) -> Category {
-        Category::Lint
-    }
-
-    fn severity(&self) -> Severity {
-        Severity::Warning
-    }
-
-    fn suggestion(&self) -> Option<&'static str> {
-        Some("Remove the constant or use it at every call site that needs it.")
-    }
-    fn suggestion_example(&self) -> Option<&'static str> {
-        Some("before: const MAX_RETRY: usize = 3;\nafter: let retries = MAX_RETRY;")
-    }
-
-    fn prefilter_signatures(&self) -> &'static [&'static str] {
-        &["const"]
-    }
-
-    fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
-        let declarations = collect_declarations(ctx.content, parse_const_bindings);
-        declarations
-            .iter()
-            .filter_map(|decl| {
-                if is_rule_ignored(ctx, decl.line_no, self.id(), self.name(), self.category()) {
-                    return None;
-                }
-                if has_usage_after_declaration(ctx.content, &decl, &declarations) {
-                    None
-                } else {
-                    Some(self.finding(
-                        ctx,
-                        decl.line_no,
-                        decl.column,
-                        format!("unused constant `{}`", decl.name),
-                        &decl.snippet,
-                    ))
-                }
-            })
-            .collect()
-    }
-}
-
-fn collect_declarations(
+pub(super) fn collect_declarations(
     content: &str,
     parse: fn(&str) -> Vec<(String, usize)>,
 ) -> Vec<Declaration> {
@@ -163,7 +45,7 @@ fn collect_declarations(
     out
 }
 
-fn parse_let_bindings(statement: &str) -> Vec<(String, usize)> {
+pub(super) fn parse_let_bindings(statement: &str) -> Vec<(String, usize)> {
     let trimmed = statement.trim_start();
     let mut offset = statement.len() - trimmed.len();
     let Some(mut rest) = trimmed.strip_prefix("let ") else {
@@ -254,6 +136,10 @@ fn parse_pattern_bindings(pattern: &str, base_offset: usize) -> Vec<(String, usi
     out
 }
 
+pub(super) fn parse_const_bindings(statement: &str) -> Vec<(String, usize)> {
+    parse_const_binding(statement).into_iter().collect()
+}
+
 fn parse_const_binding(statement: &str) -> Option<(String, usize)> {
     let trimmed = statement.trim_start();
     let mut offset = statement.len() - trimmed.len();
@@ -286,11 +172,7 @@ fn parse_const_binding(statement: &str) -> Option<(String, usize)> {
     }
 }
 
-fn parse_const_bindings(line: &str) -> Vec<(String, usize)> {
-    parse_const_binding(line).into_iter().collect()
-}
-
-fn has_usage_after_declaration(
+pub(super) fn has_usage_after_declaration(
     content: &str,
     decl: &Declaration,
     all_decls: &[Declaration],
@@ -311,8 +193,36 @@ fn has_usage_after_declaration(
         }
         !all_decls
             .iter()
-            .any(|d| d.name == decl.name && pos >= d.start && pos < d.end)
+            .any(|other| other.name == decl.name && pos >= other.start && pos < other.end)
     })
+}
+
+pub(super) fn scan_unused_bindings(
+    ctx: &FileContext,
+    rule: &dyn Rule,
+    parse: fn(&str) -> Vec<(String, usize)>,
+    binding_kind: &str,
+) -> Vec<Finding> {
+    let declarations = collect_declarations(ctx.content, parse);
+    declarations
+        .iter()
+        .filter_map(|decl| {
+            if is_rule_ignored(ctx, decl.line_no, rule.id(), rule.name(), rule.category()) {
+                return None;
+            }
+            if has_usage_after_declaration(ctx.content, decl, &declarations) {
+                None
+            } else {
+                Some(rule.finding(
+                    ctx,
+                    decl.line_no,
+                    decl.column,
+                    format!("unused {} `{}`", binding_kind, decl.name),
+                    &decl.snippet,
+                ))
+            }
+        })
+        .collect()
 }
 
 fn collect_binding_statements(content: &str) -> Vec<Statement> {
@@ -581,60 +491,4 @@ fn skip_block_comment(bytes: &[u8], mut index: usize) -> usize {
         }
     }
     index
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::path::Path;
-
-    fn scan_all(content: &str) -> Vec<Finding> {
-        let ctx = FileContext::new(Path::new("test.rs"), content);
-        vec![Box::new(UnusedVariableRule) as Box<dyn Rule>, Box::new(UnusedConstantRule)]
-            .iter()
-            .flat_map(|rule| rule.scan(&ctx))
-            .collect()
-    }
-
-    #[test]
-    fn detects_unused_destructured_binding() {
-        let findings = scan_all("let (left, right) = (1, 2);\nprintln!(\"{}\", left);\n");
-        let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
-        assert_eq!(ids, ["FE063"]);
-        assert!(findings[0].message.contains("right"));
-    }
-
-    #[test]
-    fn ignores_used_shadow_chain() {
-        let findings = scan_all(
-            "let value = 1;\nlet value = value + 1;\nlet value = value + 1;\nprintln!(\"{}\", value);\n",
-        );
-        assert!(findings.is_empty());
-    }
-
-    #[test]
-    fn detects_unused_multiline_destructured_binding() {
-        let findings = scan_all(
-            "let (\n    left,\n    right,\n) = pair();\nprintln!(\"{}\", left);\n",
-        );
-        assert_eq!(findings.len(), 1);
-        assert!(findings[0].message.contains("right"));
-    }
-
-    #[test]
-    fn keeps_outer_use_after_inner_shadow_block() {
-        let findings = scan_all(
-            "let value = 1;\n{\n    let value = 2;\n    println!(\"{}\", value);\n}\nprintln!(\"{}\", value);\n",
-        );
-        assert!(findings.is_empty());
-    }
-
-    #[test]
-    fn detects_unused_nested_struct_pattern_binding() {
-        let findings = scan_all(
-            "let Foo { left: Some(inner), right } = value;\nprintln!(\"{}\", right);\n",
-        );
-        assert_eq!(findings.len(), 1);
-        assert!(findings[0].message.contains("inner"));
-    }
 }

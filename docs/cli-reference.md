@@ -156,7 +156,7 @@ project-controlled code.
 Runs the CLI repeatedly against a target folder and reports timing stats.
 
 - `N` is optional and defaults to `5`
-- benchmark mode defaults to `benchmarks/workload` when no target path is supplied
+- Changed in `0.1.3`: benchmark mode defaults to `benchmarks/workload` when no target path is supplied
 - each iteration runs one full CLI scan of the target folder
 - benchmark child runs suppress normal scan output and only timing stats are printed
 - no warm-up run is injected; every reported iteration is measured work
@@ -173,10 +173,10 @@ fe203 --benchmark 10 benchmarks/workload
 Fe203 builds a per-file scan index and uses cheap rule signatures to skip rule
 evaluation when a file clearly cannot match.
 
-This optimization is enabled by default and reduces CPU cost for larger scans.
+Added in `0.1.0`: this optimization is enabled by default and reduces CPU cost for larger scans.
 `--max` disables this prefilter stage to force full rule evaluation.
 
-Fe203 also maintains an incremental scan cache at `.fe203/scan-cache.v1` in the
+Added in `0.1.0`: Fe203 also maintains an incremental scan cache at `.fe203/scan-cache.v1` in the
 current workspace and reuses findings for unchanged files when the scan
 fingerprint is unchanged.
 
@@ -188,13 +188,13 @@ Print CLI usage or the current package version.
 
 Help output adapts to terminal capabilities:
 
-- narrow terminals use wrapped option descriptions
-- redirected or capture-only stdout falls back to a plain narrow layout
-- `TERM=dumb`, `FE203_ASCII=1`, and legacy Windows console environments use ASCII-safe headings/symbols
+- Added in `0.0.4`: narrow terminals use wrapped option descriptions
+- Changed in `0.1.5`: redirected or capture-only stdout falls back to a plain narrow layout
+- Added in `0.0.4`; changed in `0.1.5`: `TERM=dumb`, `FE203_ASCII=1`, and legacy Windows console environments use ASCII-safe headings/symbols
 
 ## Output Model
 
-In human-readable mode, Fe203 prints scan status/progress lines to `stderr`:
+Added in `0.1.0`: in human-readable mode, Fe203 prints scan status/progress lines to `stderr`:
 
 - discovery start/completion
 - scan start/completion and total finding count
@@ -214,10 +214,10 @@ Each finding includes:
 - `snippet`
 - `suggestion`
 
-Human output prints each finding with its own `path:line:column` prefix so the
+Changed in `0.1.5`: human output prints each finding with its own `path:line:column` prefix so the
 location stays visible even when multiple findings come from the same file.
 
-On narrow terminals or redirected output, Fe203 switches to a stacked layout:
+Changed in `0.1.5`: on narrow terminals or redirected output, Fe203 switches to a stacked layout:
 the first line prints `path:line:column` and the second line prints severity,
 rule ID, and message. Paths are normalized to forward slashes so the same
 location format is used across Windows and Unix-like terminals.

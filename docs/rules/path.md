@@ -2,10 +2,10 @@
 
 Rules covering path traversal and untrusted path-join risks.
 
-| ID    | Severity | Name                           | Detects                                                     |
-|-------|----------|--------------------------------|-------------------------------------------------------------|
-| FE120 | high     | `path-traversal-literal`       | a literal `..` path segment passed to `.join(`, `.push(`, or `PathBuf::from(` |
-| FE121 | warning  | `unsanitized-path-input`       | a `.join(`/`.push(` call whose argument textually looks like untrusted input  |
+| ID    | Severity | Name                           | Detects                                                                                                |
+|-------|----------|--------------------------------|--------------------------------------------------------------------------------------------------------|
+| FE120 | high     | `path-traversal-literal`       | a literal `..` path segment passed to `.join(`, `.push(`, or `PathBuf::from(`                          |
+| FE121 | warning  | `unsanitized-path-input`       | a `.join(`/`.push(` call whose argument textually looks like untrusted input                           |
 | FE122 | high     | `archive-entry-path-traversal` | archive extraction code that joins destination paths with entry-derived names without clear validation |
 
 ## FE120 — `path-traversal-literal`
@@ -29,7 +29,7 @@ Flags archive extraction-style code when a destination path is joined with an
 entry-derived variable such as `archive_entry_path`, `entry_name`, or similar
 input in nearby archive/extract context.
 
-The rule treats common safe archive patterns as explicit validation, including
+Changed in `0.1.4`: the rule treats common safe archive patterns as explicit validation, including
 paths derived from APIs such as `enclosed_name()` and joined extraction paths
 that are canonicalized and checked with `.starts_with(...)` before use.
 

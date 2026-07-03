@@ -40,9 +40,9 @@ Scan the current directory:
 fe203 .
 ```
 
-Running `fe203` with no path prints a quick-start intro screen.
+Added in `0.0.4`: running `fe203` with no path prints a quick-start intro screen.
 
-Human-readable findings always include `path:line:column`. On narrow or
+Changed in `0.1.5`: human-readable findings always include `path:line:column`. On narrow or
 redirected terminals, Fe203 automatically switches to a stacked layout so long
 messages stay readable without horizontal wrapping.
 

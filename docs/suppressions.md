@@ -39,6 +39,8 @@ fn example() {
 
 ## Notes
 
+- `fe203-ignore`: Added in `0.0.2`.
+- `fe203-ignore-file`: Added in `0.0.3`.
 - These checks are line/file-oriented text checks, not AST-aware.
 - Use them for deliberate test fixtures or genuinely accepted false positives,
   not to silence findings that should instead be fixed.

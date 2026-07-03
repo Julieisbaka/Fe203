@@ -1,5 +1,3 @@
-use crate::rules::FileContext;
-
 const REGEX_MARKERS: &[&str] = &[
     "Regex::new(",
     "regex::Regex::new(",
@@ -243,7 +241,7 @@ pub(super) fn scan_all_for_tests(
     content: &str,
     rules: &[Box<dyn crate::rules::Rule>],
 ) -> Vec<crate::finding::Finding> {
-    let ctx = FileContext::new(std::path::Path::new("test.rs"), content);
+    let ctx = crate::rules::FileContext::new(std::path::Path::new("test.rs"), content);
     rules.iter().flat_map(|rule| rule.scan(&ctx)).collect()
 }
 

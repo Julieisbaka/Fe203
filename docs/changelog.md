@@ -1,5 +1,9 @@
 # Fe203 Changelog
 
+## `0.1.7`
+
+- Split the `lint` unused-binding implementation into focused submodules for FE063/FE064 rule logic and shared statement/scope helpers without changing rule behavior.
+
 ## `0.1.6`
 
 - Clarified in CLI help and docs that `--check-syntax` and `--max` are unsafe on untrusted repositories because they invoke Cargo on the target project.
