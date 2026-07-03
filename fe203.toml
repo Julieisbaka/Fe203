@@ -7,11 +7,18 @@ unsafe = true
 secrets = true
 lint = true
 regex = true
+shell = true
+path = true
 
 [rules]
 # Per-rule overrides win over category toggles.
 # FE003 = false   # allow dbg!()
 
+[severity]
+# Optional per-rule severity overrides.
+# FE040 = "critical"
+
 [paths]
 # Directory or file names skipped during discovery.
 exclude = ["target", ".git"]
+include = ["Cargo.toml"]

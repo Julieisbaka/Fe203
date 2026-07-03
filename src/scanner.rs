@@ -1,10 +1,50 @@
 //! File discovery and scan orchestration.
 // fe203-ignore-file FE001, FE020
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use crate::finding::Finding;
 use crate::rules::{FileContext, Rule};
+
+/// Expands scan targets with manifest-aware Cargo workspace discovery.
+///
+/// If a target is a directory containing `Cargo.toml` or a `Cargo.toml` file,
+/// Fe203 discovers `[workspace].members` and adds each member path to the
+/// target set.
+pub fn expand_manifest_targets(targets: &[PathBuf]) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let mut seen = HashSet::new();
+
+    for target in targets {
+        add_target(target.clone(), &mut out, &mut seen);
+
+        let manifest = if target.is_file() && target.file_name().is_some_and(|n| n == "Cargo.toml") {
+            Some(target.clone())
+        } else {
+            let candidate = target.join("Cargo.toml");
+            if candidate.is_file() {
+                Some(candidate)
+            } else {
+                None
+            }
+        };
+
+        let Some(manifest) = manifest else {
+            continue;
+        };
+        if let Some(dir) = manifest.parent() {
+            add_target(dir.to_path_buf(), &mut out, &mut seen);
+            if let Ok(text) = std::fs::read_to_string(&manifest) {
+                for member in parse_workspace_members(&text) {
+                    add_target(dir.join(member), &mut out, &mut seen);
+                }
+            }
+        }
+    }
+
+    out
+}
 
 /// Recursively collects `.rs` files under `root` into `out`, skipping any
 /// directory or file whose name matches an `exclude` entry. If `root` is a
@@ -16,6 +56,63 @@ pub fn discover_files(root: &Path, exclude: &[String], include: &[String], out: 
         return;
     }
     walk(root, root, exclude, include, out);
+}
+
+fn add_target(path: PathBuf, out: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
+    let key = path.to_string_lossy().replace('\\', "/");
+    if seen.insert(key) {
+        out.push(path);
+    }
+}
+
+fn parse_workspace_members(manifest: &str) -> Vec<String> {
+    let mut in_workspace = false;
+    let mut collecting_members = false;
+    let mut members_raw = String::new();
+
+    for raw in manifest.lines() {
+        let line = raw.trim();
+        if line.starts_with('[') {
+            in_workspace = line == "[workspace]";
+            collecting_members = false;
+            continue;
+        }
+        if !in_workspace || line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+
+        if collecting_members {
+            members_raw.push_str(line);
+            if line.contains(']') {
+                collecting_members = false;
+            }
+            continue;
+        }
+
+        if line.starts_with("members") {
+            let Some((_, rhs)) = line.split_once('=') else {
+                continue;
+            };
+            let rhs = rhs.trim();
+            members_raw.push_str(rhs);
+            if !rhs.contains(']') {
+                collecting_members = true;
+            }
+        }
+    }
+
+    let inner = members_raw
+        .strip_prefix('[')
+        .and_then(|s| s.strip_suffix(']'))
+        .unwrap_or("");
+
+    inner
+        .split(',')
+        .map(str::trim)
+        .filter_map(|item| item.strip_prefix('"').and_then(|s| s.strip_suffix('"')))
+        .filter(|item| !item.is_empty())
+        .map(str::to_string)
+        .collect()
 }
 
 fn walk(dir: &Path, root: &Path, exclude: &[String], include: &[String], out: &mut Vec<PathBuf>) {
@@ -85,6 +182,24 @@ mod tests {
 
         assert_eq!(files.len(), 1);
         assert!(files[0].ends_with("src/main.rs") || files[0].ends_with("src\\main.rs"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn expands_workspace_member_targets() {
+        let dir = temp_dir("workspace-members");
+        std::fs::create_dir_all(dir.join("crates/a/src")).unwrap();
+        std::fs::create_dir_all(dir.join("crates/b/src")).unwrap();
+        std::fs::write(
+            dir.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/a\", \"crates/b\"]\n",
+        )
+        .unwrap();
+
+        let targets = expand_manifest_targets(&[dir.clone()]);
+        assert!(targets.iter().any(|p| p.ends_with("crates/a") || p.ends_with("crates\\a")));
+        assert!(targets.iter().any(|p| p.ends_with("crates/b") || p.ends_with("crates\\b")));
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 

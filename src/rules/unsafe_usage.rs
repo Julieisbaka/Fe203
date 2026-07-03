@@ -33,6 +33,11 @@ impl Rule for UnsafeUsageRule {
     fn suggestion(&self) -> Option<&'static str> {
         Some("Isolate unsafe code behind a safe abstraction and document the safety invariants.")
     }
+    fn suggestion_example(&self) -> Option<&'static str> {
+        Some(
+            "before: unsafe { ptr.read() }\nafter: // SAFETY: ptr is valid and aligned\nlet value = unsafe { ptr.read() };",
+        )
+    }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
@@ -80,6 +85,11 @@ impl Rule for UnsafeFnRule {
     }
     fn suggestion(&self) -> Option<&'static str> {
         Some("Prefer a safe function if possible, or document the caller obligations in a Safety section.")
+    }
+    fn suggestion_example(&self) -> Option<&'static str> {
+        Some(
+            "before: pub unsafe fn from_raw(p: *const u8) -> T\nafter: /// # Safety\n/// `p` must point to ...\npub unsafe fn from_raw(p: *const u8) -> T",
+        )
     }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {

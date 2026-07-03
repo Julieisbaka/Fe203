@@ -74,6 +74,11 @@ impl Rule for SecretAssignmentRule {
     fn suggestion(&self) -> Option<&'static str> {
         Some("Move the secret into environment-based configuration or a dedicated secret store.")
     }
+    fn suggestion_example(&self) -> Option<&'static str> {
+        Some(
+            "before: let api_key = \"sk-123\";\nafter: let api_key = std::env::var(\"API_KEY\")?;",
+        )
+    }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();

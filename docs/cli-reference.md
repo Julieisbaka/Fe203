@@ -56,6 +56,51 @@ The command exits with a non-zero status if the target file already exists.
 
 Renders findings as JSON instead of the human-readable report.
 
+## `--sarif`
+
+Renders findings as SARIF v2.1.0 JSON for CI/code-scanning systems.
+
+`--json` and `--sarif` are mutually exclusive.
+
+## `--baseline <FILE>`
+
+Loads a baseline file and suppresses findings that already exist in it.
+
+Baseline format is line-based:
+
+```text
+RULE_ID|path/to/file.rs|line|column|message
+```
+
+Lines starting with `#` are ignored as comments.
+
+## `--init-baseline [FILE]`
+
+Writes a baseline from the current scan results and exits.
+
+If no output file is supplied, Fe203 writes `./fe203.baseline`.
+The command exits with a non-zero status if the target file already exists.
+
+## `--check-syntax`
+
+Runs an opt-in `cargo check --quiet` pass before scanning.
+
+- Syntax checking is disabled by default.
+- Checks run only for scan targets that resolve to a directory containing
+	`Cargo.toml` (or a `Cargo.toml` file target).
+- If no matching Cargo target is found, Fe203 prints a warning and continues.
+- If `cargo check` fails, Fe203 exits with code `2`.
+
+## `--max`
+
+Runs Fe203 in maximum validation mode before scanning:
+
+- runs `cargo check --quiet` automatically
+- runs `cargo test --quiet` automatically
+- enables all built-in rules regardless of `fe203.toml` toggles or CLI rule/category filters
+
+`--max` is useful for strict CI checks or deep local validation sweeps.
+
 ## `--help`, `--version`
 
 Print CLI usage or the current package version.

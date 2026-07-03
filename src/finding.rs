@@ -22,6 +22,16 @@ impl Severity {
             Severity::Critical => "critical",
         }
     }
+
+    pub fn from_name(name: &str) -> Option<Severity> {
+        match name.trim().to_ascii_lowercase().as_str() {
+            "info" => Some(Severity::Info),
+            "warning" => Some(Severity::Warning),
+            "high" => Some(Severity::High),
+            "critical" => Some(Severity::Critical),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Display for Severity {
@@ -90,4 +100,5 @@ pub struct Finding {
     pub message: String,
     pub snippet: String,
     pub suggestion: Option<String>,
+    pub suggestion_example: Option<String>,
 }

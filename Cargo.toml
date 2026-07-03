@@ -1,9 +1,23 @@
 [package]
 name = "fe203"
-version = "0.0.3"
+version = "0.0.4"
 edition = "2021"
 description = "A fast yet powerful CLI tool for scanning and linting Rust code."
 license = "MIT"
 repository = "https://github.com/Julieisbaka/Fe203"
+readme = "README.md"
+documentation = "https://github.com/Julieisbaka/Fe203/tree/main/docs"
+keywords = ["cli", "rust", "lint", "security", "scanner"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "fe203"
+path = "src/main.rs"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
 
 [dependencies]

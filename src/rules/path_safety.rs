@@ -46,6 +46,9 @@ impl Rule for PathTraversalLiteralRule {
     fn suggestion(&self) -> Option<&'static str> {
         Some("Reject or normalize path segments containing `..` before joining them onto a base directory.")
     }
+    fn suggestion_example(&self) -> Option<&'static str> {
+        Some("before: base.join(\"../secret\")\nafter: if segment.contains(\"..\") { return Err(e); }")
+    }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
@@ -116,6 +119,9 @@ impl Rule for UnsanitizedPathInputRule {
 
     fn suggestion(&self) -> Option<&'static str> {
         Some("Validate or canonicalize path segments derived from external input before joining them onto a base directory.")
+    }
+    fn suggestion_example(&self) -> Option<&'static str> {
+        Some("before: base.join(user_input)\nafter: base.join(sanitize_segment(user_input)?)")
     }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {

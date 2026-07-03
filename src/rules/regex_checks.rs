@@ -40,6 +40,9 @@ impl Rule for NestedQuantifierRegexRule {
     fn suggestion(&self) -> Option<&'static str> {
         Some("Rewrite the pattern to avoid repeating a group that already contains a quantifier.")
     }
+    fn suggestion_example(&self) -> Option<&'static str> {
+        Some("before: (a+)+$\nafter: a+$")
+    }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
@@ -91,6 +94,9 @@ impl Rule for SuspiciousRegexRule {
     fn suggestion(&self) -> Option<&'static str> {
         Some("Tighten the pattern by replacing broad wildcards or removing empty alternation branches.")
     }
+    fn suggestion_example(&self) -> Option<&'static str> {
+        Some("before: .*token.*.*\nafter: ^[A-Za-z0-9_]*token[A-Za-z0-9_]*$")
+    }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
@@ -140,6 +146,9 @@ impl Rule for DynamicRegexRule {
 
     fn suggestion(&self) -> Option<&'static str> {
         Some("Prefer a fixed regex literal and validate user input separately before matching.")
+    }
+    fn suggestion_example(&self) -> Option<&'static str> {
+        Some("before: Regex::new(format!(\"{}\", user))\nafter: Regex::new(r\"^[a-z]+$\")")
     }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
@@ -201,6 +210,9 @@ impl Rule for UnanchoredValidationRegexRule {
 
     fn suggestion(&self) -> Option<&'static str> {
         Some("Anchor the pattern with `^...$` if the regex is meant to validate the entire input.")
+    }
+    fn suggestion_example(&self) -> Option<&'static str> {
+        Some("before: re.is_match(r\"[a-z]+\")\nafter: re.is_match(r\"^[a-z]+$\")")
     }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {

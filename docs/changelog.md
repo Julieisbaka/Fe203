@@ -1,5 +1,19 @@
 # Fe203 Changelog
 
+## `0.0.4`
+
+- Added opt-in CLI syntax checking via `--check-syntax`.
+- Added `--max` mode that runs `cargo check` + `cargo test` automatically and enables all built-in rules.
+- Added SARIF output via `--sarif` (SARIF v2.1.0 JSON).
+- Added baseline workflows:
+  - `--init-baseline [FILE]` to capture the current finding set
+  - `--baseline <FILE>` to suppress previously known findings
+- Added per-rule severity overrides via `[severity]` in `fe203.toml`.
+- Added manifest-aware Cargo target expansion:
+  - scans from directories or `Cargo.toml` targets now expand `[workspace].members`
+- Added fix examples alongside rule suggestions in human and JSON output.
+- Improved Cargo package/bin build metadata to support cleaner CLI installation via `cargo install --path .`.
+
 ## `0.0.3`
 
 - Added two new rule families: `shell` (FE100, FE101) for shell command

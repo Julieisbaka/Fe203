@@ -21,6 +21,11 @@ OPTIONS:
         --explain <ID>         Show a detailed explanation for one rule (e.g. FE080)
         --init-config [FILE]   Generate a fe203.toml template file (default: ./fe203.toml)
         --json                 Emit findings as JSON
+        --sarif                Emit findings as SARIF JSON
+        --baseline <FILE>      Suppress findings already present in baseline file
+        --init-baseline [FILE] Write a baseline from current findings (default: ./fe203.baseline)
+        --check-syntax         Run `cargo check` on matching Cargo targets before scanning
+        --max                  Run all rules and automatically run `cargo check` + `cargo test`
         --list-rules           List all available rules and exit
     -h, --help                 Print help
     -V, --version              Print version
@@ -35,9 +40,14 @@ pub struct CliOptions {
     pub paths: Vec<PathBuf>,
     pub config: Option<PathBuf>,
     pub json: bool,
+    pub sarif: bool,
     pub list_rules: bool,
     pub explain: Option<String>,
     pub init_config: Option<PathBuf>,
+    pub baseline: Option<PathBuf>,
+    pub init_baseline: Option<PathBuf>,
+    pub check_syntax: bool,
+    pub max: bool,
     pub help: bool,
     pub version: bool,
     /// Uppercased rule IDs, if `--rules` was given.
@@ -72,7 +82,10 @@ pub fn parse(args: &[String]) -> Result<CliOptions, String> {
             "-h" | "--help" => opts.help = true,
             "-V" | "--version" => opts.version = true,
             "--json" => opts.json = true,
+            "--sarif" => opts.sarif = true,
             "--list-rules" => opts.list_rules = true,
+            "--check-syntax" => opts.check_syntax = true,
+            "--max" => opts.max = true,
             "--explain" => {
                 let value = iter
                     .next()
@@ -90,6 +103,24 @@ pub fn parse(args: &[String]) -> Result<CliOptions, String> {
                     }
                 }
                 opts.init_config = Some(default_path);
+            }
+            "--init-baseline" => {
+                let default_path = PathBuf::from("fe203.baseline");
+                let next = iter.clone().next();
+                if let Some(value) = next {
+                    if !value.starts_with('-') {
+                        let value = iter.next().expect("iterator advanced after clone check");
+                        opts.init_baseline = Some(PathBuf::from(value));
+                        continue;
+                    }
+                }
+                opts.init_baseline = Some(default_path);
+            }
+            "--baseline" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| format!("{arg} requires a file path"))?;
+                opts.baseline = Some(PathBuf::from(value));
             }
             "-c" | "--config" => {
                 let value = iter
@@ -175,12 +206,27 @@ mod tests {
 
     #[test]
     fn parses_explain_and_init_config() {
-        let args: Vec<String> = ["--explain", "fe080", "--init-config"]
+        let args: Vec<String> = [
+            "--explain",
+            "fe080",
+            "--init-config",
+            "--sarif",
+            "--check-syntax",
+            "--max",
+            "--baseline",
+            "existing.baseline",
+            "--init-baseline",
+        ]
             .iter()
             .map(|s| s.to_string())
             .collect();
         let opts = parse(&args).unwrap();
         assert_eq!(opts.explain, Some("FE080".to_string()));
         assert_eq!(opts.init_config, Some(PathBuf::from("fe203.toml")));
+        assert!(opts.sarif);
+        assert!(opts.check_syntax);
+        assert!(opts.max);
+        assert_eq!(opts.baseline, Some(PathBuf::from("existing.baseline")));
+        assert_eq!(opts.init_baseline, Some(PathBuf::from("fe203.baseline")));
     }
 }

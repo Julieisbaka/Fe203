@@ -1,6 +1,9 @@
 //! Output rendering: human-readable console report and JSON.
 // fe203-ignore-file FE001
 
+use std::collections::HashSet;
+
+use crate::config::Config;
 use crate::finding::Finding;
 
 /// Human-readable report, grouped by file.
@@ -29,6 +32,12 @@ pub fn render_human(findings: &[Finding], files_scanned: usize, rules_enabled: u
         if let Some(suggestion) = &finding.suggestion {
             out.push_str(&format!("      = help: {}\n", suggestion));
         }
+        if let Some(example) = &finding.suggestion_example {
+            out.push_str("      = example:\n");
+            for line in example.lines() {
+                out.push_str(&format!("          {}\n", line));
+            }
+        }
     }
 
     if !findings.is_empty() {
@@ -51,7 +60,7 @@ pub fn render_json(findings: &[Finding]) -> String {
             out.push(',');
         }
         out.push_str(&format!(
-            "{{\"rule_id\":{},\"rule_name\":{},\"category\":{},\"severity\":{},\"file\":{},\"line\":{},\"column\":{},\"message\":{},\"snippet\":{},\"suggestion\":{}}}",
+            "{{\"rule_id\":{},\"rule_name\":{},\"category\":{},\"severity\":{},\"file\":{},\"line\":{},\"column\":{},\"message\":{},\"snippet\":{},\"suggestion\":{},\"suggestion_example\":{}}}",
             json_string(finding.rule_id),
             json_string(finding.rule_name),
             json_string(finding.category.name()),
@@ -62,10 +71,91 @@ pub fn render_json(findings: &[Finding]) -> String {
             json_string(&finding.message),
             json_string(&finding.snippet),
             json_optional_string(finding.suggestion.as_deref()),
+            json_optional_string(finding.suggestion_example.as_deref()),
         ));
     }
     out.push(']');
     out
+}
+
+pub fn render_sarif(findings: &[Finding]) -> String {
+    let mut out = String::new();
+    out.push_str("{\"$schema\":\"https://json.schemastore.org/sarif-2.1.0.json\",\"version\":\"2.1.0\",\"runs\":[{");
+    out.push_str("\"tool\":{\"driver\":{\"name\":\"fe203\",\"version\":");
+    out.push_str(&json_string(env!("CARGO_PKG_VERSION")));
+    out.push_str("}},\"results\":[");
+
+    for (i, finding) in findings.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        let level = match finding.severity.name() {
+            "critical" | "high" => "error",
+            "warning" => "warning",
+            _ => "note",
+        };
+        out.push_str("{\"ruleId\":");
+        out.push_str(&json_string(finding.rule_id));
+        out.push_str(",\"level\":");
+        out.push_str(&json_string(level));
+        out.push_str(",\"message\":{\"text\":");
+        out.push_str(&json_string(&finding.message));
+        out.push_str("},\"locations\":[{\"physicalLocation\":{\"artifactLocation\":{\"uri\":");
+        out.push_str(&json_string(&finding.file.display().to_string().replace('\\', "/")));
+        out.push_str("},\"region\":{\"startLine\":");
+        out.push_str(&finding.line.to_string());
+        out.push_str(",\"startColumn\":");
+        out.push_str(&finding.column.to_string());
+        out.push_str("}}}]");
+        if let Some(help) = &finding.suggestion {
+            out.push_str(",\"help\":");
+            out.push_str(&json_string(help));
+        }
+        out.push('}');
+    }
+
+    out.push_str("]}]}");
+    out
+}
+
+pub fn apply_severity_overrides(findings: &mut [Finding], config: &Config) {
+    for finding in findings {
+        if let Some(override_severity) = config.severity.get(finding.rule_id) {
+            finding.severity = *override_severity;
+        }
+    }
+}
+
+pub fn baseline_lines(findings: &[Finding]) -> Vec<String> {
+    findings
+        .iter()
+        .map(finding_signature)
+        .collect::<Vec<_>>()
+}
+
+pub fn apply_baseline(findings: &[Finding], baseline_text: &str) -> Vec<Finding> {
+    let known: HashSet<&str> = baseline_text
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .collect();
+
+    findings
+        .iter()
+        .filter(|finding| !known.contains(finding_signature(finding).as_str()))
+        .cloned()
+        .collect()
+}
+
+fn finding_signature(finding: &Finding) -> String {
+    format!(
+        "{}|{}|{}|{}|{}",
+        finding.rule_id,
+        finding.file.display().to_string().replace('\\', "/"),
+        finding.line,
+        finding.column,
+        finding.message
+    )
 }
 
 fn json_optional_string(s: Option<&str>) -> String {
@@ -113,6 +203,7 @@ mod tests {
             suggestion: Some(
                 "Implement the code path or remove the placeholder macro.".to_string(),
             ),
+            suggestion_example: Some("before: todo!()\nafter: return Err(err);".to_string()),
         }
     }
 
@@ -134,7 +225,23 @@ mod tests {
         assert!(json.contains("\"rule_id\":\"FE001\""));
         assert!(json.contains("\"severity\":\"warning\""));
         assert!(json.contains("\"suggestion\":"));
+        assert!(json.contains("\"suggestion_example\":"));
         assert!(json.contains("\\u0060todo!\\u0060") || json.contains("`todo!`"));
+    }
+
+    #[test]
+    fn sarif_output_contains_schema_and_rule_id() {
+        let sarif = render_sarif(&[sample()]);
+        assert!(sarif.contains("\"version\":\"2.1.0\""));
+        assert!(sarif.contains("\"ruleId\":\"FE001\""));
+    }
+
+    #[test]
+    fn baseline_filters_existing_finding() {
+        let finding = sample();
+        let line = baseline_lines(std::slice::from_ref(&finding)).join("\n");
+        let filtered = apply_baseline(&[finding], &line);
+        assert!(filtered.is_empty());
     }
 
     #[test]

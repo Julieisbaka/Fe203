@@ -23,6 +23,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use crate::finding::Severity;
 use crate::rules::Rule;
 
 #[derive(Debug, Clone)]
@@ -31,6 +32,8 @@ pub struct Config {
     pub rulesets: HashMap<String, bool>,
     /// Rule ID -> enabled. Overrides the category toggle.
     pub rules: HashMap<String, bool>,
+    /// Rule ID -> severity override.
+    pub severity: HashMap<String, Severity>,
     /// Directory/file names to skip during discovery.
     pub exclude: Vec<String>,
     /// Extra file names to include during discovery, even if they are not `.rs` files.
@@ -42,6 +45,7 @@ impl Default for Config {
         Config {
             rulesets: HashMap::new(),
             rules: HashMap::new(),
+            severity: HashMap::new(),
             exclude: vec!["target".to_string(), ".git".to_string()],
             include: Vec::new(),
         }
@@ -102,6 +106,17 @@ impl Config {
                         .ok_or_else(|| format!("line {}: expected true/false", line_no + 1))?;
                     config.rules.insert(key.to_uppercase(), enabled);
                 }
+                "severity" => {
+                    let raw = parse_string(value)
+                        .ok_or_else(|| format!("line {}: expected a string", line_no + 1))?;
+                    let severity = Severity::from_name(raw).ok_or_else(|| {
+                        format!(
+                            "line {}: expected one of \"info\", \"warning\", \"high\", \"critical\"",
+                            line_no + 1
+                        )
+                    })?;
+                    config.severity.insert(key.to_uppercase(), severity);
+                }
                 "paths" => {
                     if key == "exclude" {
                         config.exclude = parse_string_array(value).ok_or_else(|| {
@@ -145,6 +160,8 @@ impl Config {
         // fe203-ignore FE003
         out.push_str("dbg!");
         out.push_str("()\n\n");
+        out.push_str("[severity]\n");
+        out.push_str("# FE040 = \"critical\"\n\n");
         out.push_str("[paths]\n");
         out.push_str(&format!("exclude = [{}]\n", join_string_list(&exclude)));
         out.push_str("include = [\"Cargo.toml\"]\n");
@@ -172,6 +189,10 @@ fn parse_string_array(value: &str) -> Option<Vec<String>> {
         out.push(s.to_string());
     }
     Some(out)
+}
+
+fn parse_string(value: &str) -> Option<&str> {
+    value.strip_prefix('"')?.strip_suffix('"')
 }
 
 fn default_excludes() -> Vec<String> {
@@ -242,6 +263,7 @@ mod tests {
         }
         assert_eq!(config.exclude, ["target", ".git"]);
         assert!(config.include.is_empty());
+        assert!(config.severity.is_empty());
     }
 
     #[test]
@@ -271,11 +293,12 @@ mod tests {
     #[test]
     fn parses_excludes_and_comments() {
         let config = Config::parse(
-            "# top comment\n[paths]\nexclude = [\"target\", \"vendor\"] # trailing\ninclude = [\"Cargo.toml\", \"build.rs\"]\n",
+            "# top comment\n[severity]\nFE040 = \"critical\"\n[paths]\nexclude = [\"target\", \"vendor\"] # trailing\ninclude = [\"Cargo.toml\", \"build.rs\"]\n",
         )
         .unwrap();
         assert_eq!(config.exclude, ["target", "vendor"]);
         assert_eq!(config.include, ["Cargo.toml", "build.rs"]);
+        assert_eq!(config.severity.get("FE040"), Some(&Severity::Critical));
     }
 
     #[test]

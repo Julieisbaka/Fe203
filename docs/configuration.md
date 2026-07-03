@@ -18,6 +18,10 @@ path = true
 # Per-rule overrides win over category toggles.
 FE003 = false   # allow dbg!()
 
+[severity]
+# Optional per-rule severity overrides.
+FE040 = "critical"
+
 [paths]
 # Directory or file names skipped/included during discovery.
 exclude = ["target", ".git"]
@@ -28,6 +32,7 @@ include = ["Cargo.toml"]
 
 - `[rulesets]` — toggles an entire category on or off.
 - `[rules]` — toggles a single rule by ID, overriding its category setting.
+- `[severity]` — remaps finding severity for specific rule IDs.
 - `[paths]` — `exclude` and `include` lists that adjust file discovery.
 
 ## Precedence
@@ -36,7 +41,21 @@ include = ["Cargo.toml"]
 2. Category toggle (`[rulesets]`)
 3. Default (enabled)
 
+Severity is chosen per finding as:
+
+1. `[severity].<RULE_ID>` override, when present
+2. rule default severity
+
 CLI filters (`--rules`, `--categories`) are applied on top of the config.
+
+## Severity Values
+
+`[severity]` accepts these string values:
+
+- `"info"`
+- `"warning"`
+- `"high"`
+- `"critical"`
 
 ## `--init-config` and `.gitignore`
 

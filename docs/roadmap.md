@@ -5,11 +5,8 @@ Suggested next features for future releases:
 - `Result`/`Option` handling heuristics (`unwrap`, `expect`, ignored errors)
 - FFI boundary review
 - serde/deserialization safety checks
-- manifest-aware crate/workspace discovery
-- per-rule severity overrides in config
 - per-directory rule profiles
-- SARIF output for CI systems
-- fix-it hints that include a short code example
+- baseline drift tools (refresh/diff/audit)
 
 ## New Ideas Following the Shell and Path Rule Families
 

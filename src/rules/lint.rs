@@ -34,6 +34,9 @@ impl Rule for ClampLikePatternRule {
     fn suggestion(&self) -> Option<&'static str> {
         Some("Replace the chained min/max expression with `.clamp(lower, upper)` when the bounds are known.")
     }
+    fn suggestion_example(&self) -> Option<&'static str> {
+        Some("before: v.max(min).min(max)\nafter: v.clamp(min, max)")
+    }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
@@ -99,6 +102,9 @@ impl Rule for EmptyDocCommentRule {
     fn suggestion(&self) -> Option<&'static str> {
         Some("Write a short summary for the item or remove the empty doc comment.")
     }
+    fn suggestion_example(&self) -> Option<&'static str> {
+        Some("before: ///\nafter: /// Returns the parsed configuration.")
+    }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
@@ -149,6 +155,9 @@ impl Rule for EmptyCommentRule {
 
     fn suggestion(&self) -> Option<&'static str> {
         Some("Remove the empty comment or replace it with a useful explanation.")
+    }
+    fn suggestion_example(&self) -> Option<&'static str> {
+        Some("before: //\nafter: // Keep this branch for backward compatibility.")
     }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
@@ -203,6 +212,9 @@ impl Rule for UnusedVariableRule {
     fn suggestion(&self) -> Option<&'static str> {
         Some("Remove the variable or prefix it with an underscore if it is intentionally unused.")
     }
+    fn suggestion_example(&self) -> Option<&'static str> {
+        Some("before: let value = compute();\nafter: let _value = compute();")
+    }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
@@ -254,6 +266,9 @@ impl Rule for UnusedConstantRule {
 
     fn suggestion(&self) -> Option<&'static str> {
         Some("Remove the constant or use it at every call site that needs it.")
+    }
+    fn suggestion_example(&self) -> Option<&'static str> {
+        Some("before: const MAX_RETRY: usize = 3;\nafter: let retries = MAX_RETRY;")
     }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {

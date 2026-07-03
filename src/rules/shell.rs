@@ -43,6 +43,9 @@ impl Rule for CommandExecutionRule {
     fn suggestion(&self) -> Option<&'static str> {
         Some("Pass arguments individually via `.arg()` and avoid invoking a shell unless required.")
     }
+    fn suggestion_example(&self) -> Option<&'static str> {
+        Some("before: Command::new(\"sh\").arg(\"-c\").arg(cmd)\nafter: Command::new(\"ls\").arg(\"-la\")")
+    }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
@@ -93,6 +96,9 @@ impl Rule for ShellStringInjectionRule {
 
     fn suggestion(&self) -> Option<&'static str> {
         Some("Avoid building shell command strings from dynamic input; pass arguments individually via `.arg()` instead of invoking a shell.")
+    }
+    fn suggestion_example(&self) -> Option<&'static str> {
+        Some("before: .arg(format!(\"echo {}\", user))\nafter: .arg(\"echo\").arg(user)")
     }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {

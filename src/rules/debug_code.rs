@@ -37,6 +37,18 @@ impl Rule for MacroRule {
             _ => return None,
         })
     }
+    fn suggestion_example(&self) -> Option<&'static str> {
+        Some(match self.macro_name {
+            "todo" | "unimplemented" => {
+                "before: todo!();\nafter: return Err(MyError::Unimplemented);"
+            }
+            "dbg" => "before: dbg!(value);\nafter: tracing::debug!(?value);",
+            "panic" => {
+                "before: panic!(\"bad input\");\nafter: return Err(MyError::BadInput);"
+            }
+            _ => return None,
+        })
+    }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();

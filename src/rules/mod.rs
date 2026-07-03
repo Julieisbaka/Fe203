@@ -48,6 +48,10 @@ pub trait Rule {
     fn suggestion(&self) -> Option<&'static str> {
         None
     }
+    /// Optional short code example accompanying the suggestion.
+    fn suggestion_example(&self) -> Option<&'static str> {
+        None
+    }
     /// Scans a file and returns any findings.
     fn scan(&self, ctx: &FileContext) -> Vec<Finding>;
 
@@ -71,6 +75,7 @@ pub trait Rule {
             message,
             snippet: snippet.trim().to_string(),
             suggestion: self.suggestion().map(str::to_string),
+            suggestion_example: self.suggestion_example().map(str::to_string),
         }
     }
 }
