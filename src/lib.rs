@@ -20,15 +20,20 @@ pub fn run(args: &[String]) -> i32 {
         Ok(opts) => opts,
         Err(err) => {
             eprintln!("error: {err}");
-            eprintln!("{}", cli::USAGE);
+            eprintln!("{}", cli::usage_text());
             return 2;
         }
     };
 
     maybe_register_exe_dir_in_user_path();
 
+    if should_show_intro(args) {
+        println!("{}", cli::intro_text());
+        return 0;
+    }
+
     if opts.help {
-        println!("{}", cli::USAGE);
+        println!("{}", cli::usage_text());
         return 0;
     }
     if opts.version {
@@ -181,6 +186,10 @@ pub fn run(args: &[String]) -> i32 {
     }
 }
 
+fn should_show_intro(args: &[String]) -> bool {
+    args.is_empty()
+}
+
 fn cargo_target_dirs(targets: &[PathBuf]) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -288,27 +297,28 @@ fn maybe_register_exe_dir_in_user_path() {
         let Some(dir) = exe.parent() else {
             return;
         };
-        if is_dev_build_location(dir) {
-            return;
-        }
         let dir_str = dir.to_string_lossy().to_string();
 
         if process_path_contains_dir(&dir_str) {
             return;
         }
 
-        let Some(updated) = update_user_path_with_powershell(&dir_str) else {
-            return;
-        };
-        if !updated {
-            return;
+        match update_user_path_with_powershell(&dir_str) {
+            Some(true) => {
+                append_to_process_path(&dir_str);
+                eprintln!(
+                    "info: added {} to your user PATH; open a new terminal to use fe203 globally",
+                    dir.display()
+                );
+            }
+            Some(false) => {}
+            None => {
+                eprintln!(
+                    "warning: could not update user PATH automatically; add {} to your PATH manually",
+                    dir.display()
+                );
+            }
         }
-
-        append_to_process_path(&dir_str);
-        eprintln!(
-            "info: added {} to your user PATH; open a new terminal to use fe203 globally",
-            dir.display()
-        );
     }
 }
 
@@ -319,12 +329,6 @@ fn auto_path_disabled() -> bool {
             lower == "1" || lower == "true" || lower == "yes"
         })
         .unwrap_or(false)
-}
-
-#[cfg(windows)]
-fn is_dev_build_location(dir: &std::path::Path) -> bool {
-    let normalized = dir.to_string_lossy().replace('/', "\\").to_ascii_lowercase();
-    normalized.ends_with("\\target\\debug") || normalized.ends_with("\\target\\release")
 }
 
 #[cfg(windows)]
@@ -397,6 +401,17 @@ fn ps_single_quote_escape(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shows_intro_only_for_empty_args() {
+        let no_args: Vec<String> = vec![];
+        let with_path = vec!["src".to_string()];
+        let with_flag = vec!["--help".to_string()];
+
+        assert!(should_show_intro(&no_args));
+        assert!(!should_show_intro(&with_path));
+        assert!(!should_show_intro(&with_flag));
+    }
 
     #[test]
     fn auto_path_disable_values_are_recognized() {

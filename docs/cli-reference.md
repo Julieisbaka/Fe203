@@ -2,7 +2,8 @@
 
 ## `fe203 [PATH]...`
 
-Scans the given paths. If no path is provided, `.` is used.
+Scans the given paths. If no path is provided, Fe203 prints an intro/quick-start
+screen and exits.
 Only `.rs` files are scanned by default, plus any extra files listed in
 `[paths].include` inside `fe203.toml` (see [configuration.md](configuration.md)).
 
@@ -109,6 +110,11 @@ Runs Fe203 in maximum validation mode before scanning:
 ## `--help`, `--version`
 
 Print CLI usage or the current package version.
+
+Help output adapts to terminal capabilities:
+
+- narrow terminals use wrapped option descriptions
+- `TERM=dumb` or `FE203_ASCII=1` uses ASCII-safe headings/symbols
 
 ## Output Model
 

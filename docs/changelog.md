@@ -7,6 +7,8 @@
 - Added SARIF output via `--sarif` (SARIF v2.1.0 JSON).
 - Added GitHub release automation that builds and publishes versioned Windows/Linux/macOS binary archives with SHA256 checksums.
 - Added Windows first-run auto PATH registration for downloaded release binaries (disable with `FE203_NO_AUTO_PATH=1`).
+- Changed no-argument invocation (`fe203`) to show an intro/quick-start screen instead of immediately scanning `.`.
+- Improved `--help`/intro rendering for terminal compatibility (narrow terminal wrapping and ASCII fallback with `FE203_ASCII=1` / `TERM=dumb`).
 - Added baseline workflows:
   - `--init-baseline [FILE]` to capture the current finding set
   - `--baseline <FILE>` to suppress previously known findings

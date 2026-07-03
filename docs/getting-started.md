@@ -31,8 +31,10 @@ Set `FE203_NO_AUTO_PATH=1` to disable automatic PATH registration.
 Scan the current directory:
 
 ```sh
-fe203
+fe203 .
 ```
+
+Running `fe203` with no path prints a quick-start intro screen.
 
 Scan specific paths:
 
