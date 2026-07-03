@@ -15,6 +15,17 @@ Install locally:
 cargo install --path .
 ```
 
+Install from release binaries:
+
+1. Download the matching archive from GitHub Releases.
+2. Extract `fe203`/`fe203.exe`.
+3. Run it once.
+
+On Windows, Fe203 attempts to add its own folder to your user `PATH` on first
+run. Open a new terminal afterward.
+
+Set `FE203_NO_AUTO_PATH=1` to disable automatic PATH registration.
+
 ## Your First Scan
 
 Scan the current directory:

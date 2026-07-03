@@ -23,6 +23,25 @@ cargo install --path .
 # then run: fe203 --version
 ```
 
+Install from GitHub release binaries:
+
+1. Open the project Releases page.
+2. Download the archive for your platform/target.
+3. Extract and run `fe203` (or `fe203.exe`) once.
+
+On Windows, Fe203 attempts to add its executable folder to your user `PATH`
+automatically on first run. Open a new terminal after first run.
+
+Set `FE203_NO_AUTO_PATH=1` to disable this behavior.
+
+Release assets are published with stable names:
+
+- `fe203-vX.Y.Z-x86_64-unknown-linux-gnu.tar.gz`
+- `fe203-vX.Y.Z-x86_64-apple-darwin.tar.gz`
+- `fe203-vX.Y.Z-x86_64-pc-windows-msvc.zip`
+
+These names are intended to make winget/Scoop manifest maintenance straightforward.
+
 ## Usage
 
 ```sh

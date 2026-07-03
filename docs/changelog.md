@@ -5,6 +5,8 @@
 - Added opt-in CLI syntax checking via `--check-syntax`.
 - Added `--max` mode that runs `cargo check` + `cargo test` automatically and enables all built-in rules.
 - Added SARIF output via `--sarif` (SARIF v2.1.0 JSON).
+- Added GitHub release automation that builds and publishes versioned Windows/Linux/macOS binary archives with SHA256 checksums.
+- Added Windows first-run auto PATH registration for downloaded release binaries (disable with `FE203_NO_AUTO_PATH=1`).
 - Added baseline workflows:
   - `--init-baseline [FILE]` to capture the current finding set
   - `--baseline <FILE>` to suppress previously known findings

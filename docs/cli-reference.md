@@ -6,6 +6,11 @@ Scans the given paths. If no path is provided, `.` is used.
 Only `.rs` files are scanned by default, plus any extra files listed in
 `[paths].include` inside `fe203.toml` (see [configuration.md](configuration.md)).
 
+On Windows, when run from a downloaded release binary, Fe203 attempts a
+one-time user `PATH` registration for its executable directory.
+
+Set `FE203_NO_AUTO_PATH=1` to disable this behavior.
+
 ## `--config <FILE>`
 
 Loads a config file instead of the default `./fe203.toml`.
@@ -87,7 +92,7 @@ Runs an opt-in `cargo check --quiet` pass before scanning.
 
 - Syntax checking is disabled by default.
 - Checks run only for scan targets that resolve to a directory containing
-	`Cargo.toml` (or a `Cargo.toml` file target).
+  `Cargo.toml` (or a `Cargo.toml` file target).
 - If no matching Cargo target is found, Fe203 prints a warning and continues.
 - If `cargo check` fails, Fe203 exits with code `2`.
 

@@ -25,6 +25,8 @@ pub fn run(args: &[String]) -> i32 {
         }
     };
 
+    maybe_register_exe_dir_in_user_path();
+
     if opts.help {
         println!("{}", cli::USAGE);
         return 0;
@@ -265,5 +267,164 @@ fn load_config(opts: &cli::CliOptions) -> Result<Config, String> {
                 Ok(Config::default())
             }
         }
+    }
+}
+
+fn maybe_register_exe_dir_in_user_path() {
+    #[cfg(not(windows))]
+    {
+        return;
+    }
+
+    #[cfg(windows)]
+    {
+        if auto_path_disabled() {
+            return;
+        }
+
+        let Ok(exe) = std::env::current_exe() else {
+            return;
+        };
+        let Some(dir) = exe.parent() else {
+            return;
+        };
+        if is_dev_build_location(dir) {
+            return;
+        }
+        let dir_str = dir.to_string_lossy().to_string();
+
+        if process_path_contains_dir(&dir_str) {
+            return;
+        }
+
+        let Some(updated) = update_user_path_with_powershell(&dir_str) else {
+            return;
+        };
+        if !updated {
+            return;
+        }
+
+        append_to_process_path(&dir_str);
+        eprintln!(
+            "info: added {} to your user PATH; open a new terminal to use fe203 globally",
+            dir.display()
+        );
+    }
+}
+
+fn auto_path_disabled() -> bool {
+    std::env::var("FE203_NO_AUTO_PATH")
+        .map(|v| {
+            let lower = v.trim().to_ascii_lowercase();
+            lower == "1" || lower == "true" || lower == "yes"
+        })
+        .unwrap_or(false)
+}
+
+#[cfg(windows)]
+fn is_dev_build_location(dir: &std::path::Path) -> bool {
+    let normalized = dir.to_string_lossy().replace('/', "\\").to_ascii_lowercase();
+    normalized.ends_with("\\target\\debug") || normalized.ends_with("\\target\\release")
+}
+
+#[cfg(windows)]
+fn process_path_contains_dir(dir: &str) -> bool {
+    let target = dir.trim_end_matches(['\\', '/']).to_ascii_lowercase();
+    std::env::var("PATH")
+        .ok()
+        .map(|path| {
+            path.split(';').any(|entry| {
+                entry
+                    .trim()
+                    .trim_end_matches(['\\', '/'])
+                    .eq_ignore_ascii_case(&target)
+            })
+        })
+        .unwrap_or(false)
+}
+
+#[cfg(windows)]
+fn append_to_process_path(dir: &str) {
+    if process_path_contains_dir(dir) {
+        return;
+    }
+    let existing = std::env::var("PATH").unwrap_or_default();
+    let new_path = if existing.trim().is_empty() {
+        dir.to_string()
+    } else {
+        format!("{};{}", existing.trim_end_matches(';'), dir)
+    };
+    // SAFETY: this process intentionally updates its own PATH environment variable.
+    unsafe {
+        std::env::set_var("PATH", new_path);
+    }
+}
+
+#[cfg(windows)]
+fn update_user_path_with_powershell(dir: &str) -> Option<bool> {
+    let escaped = ps_single_quote_escape(dir);
+    let script = format!(
+        "$d='{escaped}';$p=[Environment]::GetEnvironmentVariable('Path','User');$parts=@();if($p){{$parts=$p -split ';' | ForEach-Object {{$_.Trim().TrimEnd('\\')}} | Where-Object {{$_}}}};$dn=$d.TrimEnd('\\');if($parts -contains $dn){{exit 10}};$n=if([string]::IsNullOrWhiteSpace($p)){{$d}}else{{$p.TrimEnd(';')+';'+$d}};[Environment]::SetEnvironmentVariable('Path',$n,'User');"
+    );
+
+    let status = Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            &script,
+        ])
+        .status()
+        .ok()?;
+
+    let code = status.code().unwrap_or(1);
+    if code == 0 {
+        Some(true)
+    } else if code == 10 {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+#[cfg(windows)]
+fn ps_single_quote_escape(input: &str) -> String {
+    input.replace('\'', "''")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn auto_path_disable_values_are_recognized() {
+        // SAFETY: test-local environment mutation.
+        unsafe {
+            std::env::set_var("FE203_NO_AUTO_PATH", "1");
+        }
+        assert!(auto_path_disabled());
+        // SAFETY: test-local environment mutation.
+        unsafe {
+            std::env::set_var("FE203_NO_AUTO_PATH", "true");
+        }
+        assert!(auto_path_disabled());
+        // SAFETY: test-local environment mutation.
+        unsafe {
+            std::env::remove_var("FE203_NO_AUTO_PATH");
+        }
+        assert!(!auto_path_disabled());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn process_path_contains_dir_matches_case_insensitive_and_trailing_slash() {
+        // SAFETY: test-local environment mutation.
+        unsafe {
+            std::env::set_var("PATH", r"C:\Tools\Fe203;C:\Other");
+        }
+        assert!(process_path_contains_dir(r"c:\tools\fe203\"));
+        assert!(!process_path_contains_dir(r"c:\missing"));
     }
 }
