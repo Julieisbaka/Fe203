@@ -1,5 +1,21 @@
 # Fe203 Changelog
 
+## `0.1.0`
+
+- Expanded the `secrets` rule family with FE043 (`hardcoded-token`) and FE044 (`hardcoded-credential-url`).
+- Added FE066 (`dead-suppression-comment`) to flag stale suppression rule IDs.
+- Added FE075 (`assert-only-tests-without-product-calls`) for test functions that assert without calling product code.
+- Added scan progress status lines in human output mode (disable with `FE203_NO_PROGRESS=1`).
+- Optimized scanning with a per-file scan index and cheap rule prefilter signatures.
+- Updated `--max` to bypass rule prefiltering so all enabled rules always run.
+- Added incremental scan caching (`.fe203/scan-cache.v1`) keyed by file hash and scan fingerprint (disable with `FE203_NO_CACHE=1`).
+- Precompiled include/exclude path patterns during discovery for faster directory walking.
+- Added shared byte-level comment/string-skipping identifier scanner utility and reused it in lint unused detection.
+- Expanded CLI argument parsing:
+  - added short aliases for common flags (`-j`, `-s`, `-p`, `-l`, `-r`, `-g`, `-x`, `-b`, `-B`)
+  - added `--flag=value` support for value-taking options
+  - allowed repeated `--rules` and `--categories` arguments with merged values
+
 ## `0.0.5`
 
 - Added `--pretty` for formatted JSON/SARIF output.

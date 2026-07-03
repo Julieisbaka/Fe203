@@ -44,6 +44,10 @@ impl Rule for NestedQuantifierRegexRule {
         Some("before: (a+)+$\nafter: a+$")
     }
 
+    fn prefilter_signatures(&self) -> &'static [&'static str] {
+        &["regex"]
+    }
+
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
         for (line_no, line) in ctx.lines() {
@@ -98,6 +102,10 @@ impl Rule for SuspiciousRegexRule {
         Some("before: .*token.*.*\nafter: ^[A-Za-z0-9_]*token[A-Za-z0-9_]*$")
     }
 
+    fn prefilter_signatures(&self) -> &'static [&'static str] {
+        &["regex"]
+    }
+
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
         for (line_no, line) in ctx.lines() {
@@ -149,6 +157,10 @@ impl Rule for DynamicRegexRule {
     }
     fn suggestion_example(&self) -> Option<&'static str> {
         Some("before: Regex::new(format!(\"{}\", user))\nafter: Regex::new(r\"^[a-z]+$\")")
+    }
+
+    fn prefilter_signatures(&self) -> &'static [&'static str] {
+        &["regex"]
     }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
@@ -213,6 +225,10 @@ impl Rule for UnanchoredValidationRegexRule {
     }
     fn suggestion_example(&self) -> Option<&'static str> {
         Some("before: re.is_match(r\"[a-z]+\")\nafter: re.is_match(r\"^[a-z]+$\")")
+    }
+
+    fn prefilter_signatures(&self) -> &'static [&'static str] {
+        &["is_match", "captures"]
     }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {

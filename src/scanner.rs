@@ -1,11 +1,21 @@
 //! File discovery and scan orchestration.
 // fe203-ignore-file FE001, FE020
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
+use std::thread;
 
 use crate::finding::Finding;
+use crate::rules::lint::suppressions::dead_suppression_findings;
 use crate::rules::{FileContext, Rule};
+
+pub struct ScanCacheOptions<'a> {
+    pub fingerprint: &'a str,
+    pub cache_file: &'a Path,
+}
 
 /// Expands scan targets with manifest-aware Cargo workspace discovery.
 ///
@@ -19,7 +29,8 @@ pub fn expand_manifest_targets(targets: &[PathBuf]) -> Vec<PathBuf> {
     for target in targets {
         add_target(target.clone(), &mut out, &mut seen);
 
-        let manifest = if target.is_file() && target.file_name().is_some_and(|n| n == "Cargo.toml") {
+        let manifest = if target.is_file() && target.file_name().is_some_and(|n| n == "Cargo.toml")
+        {
             Some(target.clone())
         } else {
             let candidate = target.join("Cargo.toml");
@@ -51,11 +62,25 @@ pub fn expand_manifest_targets(targets: &[PathBuf]) -> Vec<PathBuf> {
 /// file it is added directly (regardless of extension) so users can scan
 /// arbitrary files explicitly.
 pub fn discover_files(root: &Path, exclude: &[String], include: &[String], out: &mut Vec<PathBuf>) {
+    let mut push = |path: PathBuf| out.push(path);
+    discover_files_stream(root, exclude, include, &mut push);
+}
+
+/// Recursively discovers scan files and invokes `on_file` for each matching
+/// path as it is found.
+pub fn discover_files_stream(
+    root: &Path,
+    exclude: &[String],
+    include: &[String],
+    on_file: &mut dyn FnMut(PathBuf),
+) {
     if root.is_file() {
-        out.push(root.to_path_buf());
+        on_file(root.to_path_buf());
         return;
     }
-    walk(root, root, exclude, include, out);
+    let exclude = compile_patterns(exclude);
+    let include = compile_patterns(include);
+    walk(root, root, &exclude, &include, on_file);
 }
 
 fn add_target(path: PathBuf, out: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
@@ -115,7 +140,13 @@ fn parse_workspace_members(manifest: &str) -> Vec<String> {
         .collect()
 }
 
-fn walk(dir: &Path, root: &Path, exclude: &[String], include: &[String], out: &mut Vec<PathBuf>) {
+fn walk(
+    dir: &Path,
+    root: &Path,
+    exclude: &[CompiledPattern],
+    include: &[CompiledPattern],
+    on_file: &mut dyn FnMut(PathBuf),
+) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
@@ -127,33 +158,399 @@ fn walk(dir: &Path, root: &Path, exclude: &[String], include: &[String], out: &m
             continue;
         }
         if path.is_dir() {
-            walk(&path, root, exclude, include, out);
+            walk(&path, root, exclude, include, on_file);
         } else if path.extension().is_some_and(|ext| ext == "rs")
             || matches_any_pattern(&path, root, include)
         {
-            out.push(path);
+            on_file(path);
         }
     }
 }
 
 /// Runs every enabled rule over every file and collects the findings,
 /// ordered by file, then line, then rule ID.
-pub fn scan_files(files: &[PathBuf], rules: &[&dyn Rule]) -> Vec<Finding> {
+pub fn scan_files(files: &[PathBuf], rules: &[&dyn Rule], use_prefilter: bool) -> Vec<Finding> {
+    scan_files_with_cache(files, rules, use_prefilter, None)
+}
+
+pub fn scan_files_with_cache(
+    files: &[PathBuf],
+    rules: &[&dyn Rule],
+    use_prefilter: bool,
+    cache: Option<ScanCacheOptions<'_>>,
+) -> Vec<Finding> {
     let mut findings = Vec::new();
+    let rule_map: HashMap<&'static str, &dyn Rule> =
+        rules.iter().map(|rule| (rule.id(), *rule)).collect();
+    let mut cache_state = cache.map(|opts| ScanCache::load(opts.cache_file, opts.fingerprint));
+    let mut pending = Vec::new();
+
     for file in files {
         let Ok(content) = std::fs::read_to_string(file) else {
             eprintln!("warning: skipping unreadable file {}", file.display());
             continue;
         };
-        let ctx = FileContext::new(file, &content);
-        for rule in rules {
-            findings.extend(rule.scan(&ctx));
+        let file_hash = hash_content(&content);
+
+        if let Some(state) = &cache_state {
+            if let Some(cached) = state.lookup(file, file_hash) {
+                findings.extend(cached.into_iter().filter_map(|entry| {
+                    let rule = rule_map.get(entry.rule_id.as_str())?;
+                    Some(Finding {
+                        rule_id: rule.id(),
+                        rule_name: rule.name(),
+                        category: rule.category(),
+                        severity: rule.severity(),
+                        file: file.clone(),
+                        line: entry.line,
+                        column: entry.column,
+                        message: entry.message,
+                        snippet: entry.snippet,
+                        suggestion: entry.suggestion,
+                        suggestion_example: entry.suggestion_example,
+                    })
+                }));
+                continue;
+            }
         }
+
+        pending.push(PendingFile {
+            file: file.clone(),
+            content,
+            hash: file_hash,
+        });
     }
+
+    let scanned = scan_pending_files(&pending, rules, use_prefilter);
+    for scanned_file in scanned {
+        if let Some(state) = &mut cache_state {
+            state.store(&scanned_file.file, scanned_file.hash, &scanned_file.findings);
+        }
+        findings.extend(scanned_file.findings);
+    }
+
+    if let Some(state) = &mut cache_state {
+        state.save();
+    }
+
     findings.sort_by(|a, b| {
         (&a.file, a.line, a.column, a.rule_id).cmp(&(&b.file, b.line, b.column, b.rule_id))
     });
     findings
+}
+
+#[derive(Debug)]
+struct PendingFile {
+    file: PathBuf,
+    content: String,
+    hash: u64,
+}
+
+#[derive(Debug)]
+struct ScannedFile {
+    file: PathBuf,
+    hash: u64,
+    findings: Vec<Finding>,
+}
+
+fn scan_pending_files(
+    pending: &[PendingFile],
+    rules: &[&dyn Rule],
+    use_prefilter: bool,
+) -> Vec<ScannedFile> {
+    if pending.is_empty() {
+        return Vec::new();
+    }
+
+    let worker_count = thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+        .min(pending.len())
+        .max(1);
+
+    if worker_count == 1 {
+        return pending
+            .iter()
+            .map(|item| ScannedFile {
+                file: item.file.clone(),
+                hash: item.hash,
+                findings: scan_single_file(&item.file, &item.content, rules, use_prefilter),
+            })
+            .collect();
+    }
+
+    let next = AtomicUsize::new(0);
+    let results = Mutex::new(Vec::with_capacity(pending.len()));
+    thread::scope(|scope| {
+        for _ in 0..worker_count {
+            scope.spawn(|| loop {
+                let idx = next.fetch_add(1, Ordering::Relaxed);
+                if idx >= pending.len() {
+                    break;
+                }
+                let item = &pending[idx];
+                let findings = scan_single_file(&item.file, &item.content, rules, use_prefilter);
+                if let Ok(mut guard) = results.lock() {
+                    guard.push(ScannedFile {
+                        file: item.file.clone(),
+                        hash: item.hash,
+                        findings,
+                    });
+                }
+            });
+        }
+    });
+
+    let mut out = results.into_inner().unwrap_or_default();
+    out.sort_by(|a, b| a.file.cmp(&b.file));
+    out
+}
+
+fn scan_single_file(file: &Path, content: &str, rules: &[&dyn Rule], use_prefilter: bool) -> Vec<Finding> {
+    let ctx = FileContext::new(file, content);
+    let mut file_findings = Vec::new();
+    let mut dead_suppression_rule = None;
+
+    for rule in rules {
+        if rule.id() == "FE066" {
+            dead_suppression_rule = Some(*rule);
+            continue;
+        }
+        if use_prefilter && !rule.should_scan(&ctx) {
+            continue;
+        }
+        file_findings.extend(rule.scan(&ctx));
+    }
+
+    if let Some(rule) = dead_suppression_rule {
+        let active_ids = file_findings
+            .iter()
+            .map(|finding| finding.rule_id)
+            .collect::<HashSet<_>>();
+        let mut dead = dead_suppression_findings(&ctx, &active_ids);
+        if use_prefilter && !rule.should_scan(&ctx) {
+            dead.clear();
+        }
+        file_findings.extend(dead);
+    }
+
+    file_findings
+}
+
+#[derive(Debug, Clone)]
+struct CachedFinding {
+    rule_id: String,
+    line: usize,
+    column: usize,
+    message: String,
+    snippet: String,
+    suggestion: Option<String>,
+    suggestion_example: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct CachedFile {
+    hash: u64,
+    findings: Vec<CachedFinding>,
+}
+
+struct ScanCache {
+    cache_file: PathBuf,
+    fingerprint: String,
+    entries: HashMap<String, CachedFile>,
+    dirty: bool,
+}
+
+impl ScanCache {
+    fn load(cache_file: &Path, fingerprint: &str) -> Self {
+        let mut entries = HashMap::new();
+        if let Ok(text) = std::fs::read_to_string(cache_file) {
+            let mut lines = text.lines();
+            if let Some(header) = lines.next() {
+                let expected = format!("v1|{}", escape_field(fingerprint));
+                if header == expected {
+                    for line in lines {
+                        let parts = split_fields(line);
+                        if parts.is_empty() {
+                            continue;
+                        }
+                        if parts[0] == "F" && parts.len() == 3 {
+                            if let Ok(hash) = parts[2].parse::<u64>() {
+                                entries.entry(parts[1].to_string()).or_insert(CachedFile {
+                                    hash,
+                                    findings: Vec::new(),
+                                });
+                            }
+                        } else if parts[0] == "R" && parts.len() == 9 {
+                            if let Some(file) = entries.get_mut(parts[1]) {
+                                file.findings.push(CachedFinding {
+                                    rule_id: parts[2].to_string(),
+                                    line: parts[3].parse::<usize>().unwrap_or(0),
+                                    column: parts[4].parse::<usize>().unwrap_or(0),
+                                    message: unescape_field(parts[5]),
+                                    snippet: unescape_field(parts[6]),
+                                    suggestion: decode_optional(parts[7]),
+                                    suggestion_example: decode_optional(parts[8]),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        ScanCache {
+            cache_file: cache_file.to_path_buf(),
+            fingerprint: escape_field(fingerprint),
+            entries,
+            dirty: false,
+        }
+    }
+
+    fn lookup(&self, file: &Path, hash: u64) -> Option<Vec<CachedFinding>> {
+        let key = normalize_path(file);
+        let cached = self.entries.get(&key)?;
+        if cached.hash != hash {
+            return None;
+        }
+        Some(cached.findings.clone())
+    }
+
+    fn store(&mut self, file: &Path, hash: u64, findings: &[Finding]) {
+        let key = normalize_path(file);
+        let cached_findings = findings
+            .iter()
+            .map(|finding| CachedFinding {
+                rule_id: finding.rule_id.to_string(),
+                line: finding.line,
+                column: finding.column,
+                message: finding.message.clone(),
+                snippet: finding.snippet.clone(),
+                suggestion: finding.suggestion.clone(),
+                suggestion_example: finding.suggestion_example.clone(),
+            })
+            .collect();
+        self.entries.insert(
+            key,
+            CachedFile {
+                hash,
+                findings: cached_findings,
+            },
+        );
+        self.dirty = true;
+    }
+
+    fn save(&mut self) {
+        if !self.dirty {
+            return;
+        }
+
+        let mut out = String::new();
+        out.push_str(&format!("v1|{}\n", self.fingerprint));
+
+        let mut keys = self.entries.keys().cloned().collect::<Vec<_>>();
+        keys.sort();
+        for key in keys {
+            let Some(entry) = self.entries.get(&key) else {
+                continue;
+            };
+            out.push_str(&format!("F|{}|{}\n", key, entry.hash));
+            for finding in &entry.findings {
+                out.push_str(&format!(
+                    "R|{}|{}|{}|{}|{}|{}|{}|{}\n",
+                    key,
+                    finding.rule_id,
+                    finding.line,
+                    finding.column,
+                    escape_field(&finding.message),
+                    escape_field(&finding.snippet),
+                    encode_optional(finding.suggestion.as_deref()),
+                    encode_optional(finding.suggestion_example.as_deref()),
+                ));
+            }
+        }
+
+        if let Some(parent) = self.cache_file.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::write(&self.cache_file, out);
+        self.dirty = false;
+    }
+}
+
+fn hash_content(content: &str) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    content.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn normalize_path(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+fn split_fields(line: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut start = 0usize;
+    for (idx, ch) in line.char_indices() {
+        if ch == '|' {
+            out.push(&line[start..idx]);
+            start = idx + 1;
+        }
+    }
+    out.push(&line[start..]);
+    out
+}
+
+fn encode_optional(value: Option<&str>) -> String {
+    match value {
+        Some(v) => escape_field(v),
+        None => "~".to_string(),
+    }
+}
+
+fn decode_optional(value: &str) -> Option<String> {
+    if value == "~" {
+        None
+    } else {
+        Some(unescape_field(value))
+    }
+}
+
+fn escape_field(value: &str) -> String {
+    let mut out = String::new();
+    for ch in value.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '|' => out.push_str("\\p"),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
+fn unescape_field(value: &str) -> String {
+    let mut out = String::new();
+    let mut chars = value.chars();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            out.push(ch);
+            continue;
+        }
+        match chars.next() {
+            Some('n') => out.push('\n'),
+            Some('r') => out.push('\r'),
+            Some('p') => out.push('|'),
+            Some('\\') => out.push('\\'),
+            Some(other) => {
+                out.push('\\');
+                out.push(other);
+            }
+            None => out.push('\\'),
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -197,8 +594,12 @@ mod tests {
         .unwrap();
 
         let targets = expand_manifest_targets(&[dir.clone()]);
-        assert!(targets.iter().any(|p| p.ends_with("crates/a") || p.ends_with("crates\\a")));
-        assert!(targets.iter().any(|p| p.ends_with("crates/b") || p.ends_with("crates\\b")));
+        assert!(targets
+            .iter()
+            .any(|p| p.ends_with("crates/a") || p.ends_with("crates\\a")));
+        assert!(targets
+            .iter()
+            .any(|p| p.ends_with("crates/b") || p.ends_with("crates\\b")));
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -216,7 +617,7 @@ mod tests {
         let rules: Vec<&dyn Rule> = registry.iter().map(|r| r.as_ref()).collect();
         let mut files = Vec::new();
         discover_files(&dir, &[], &[], &mut files);
-        let findings = scan_files(&files, &rules);
+        let findings = scan_files(&files, &rules, true);
 
         let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
         let mut ids = ids;
@@ -280,29 +681,47 @@ mod tests {
     }
 }
 
-fn matches_any_pattern(path: &Path, root: &Path, patterns: &[String]) -> bool {
-    patterns
-        .iter()
-        .any(|pattern| matches_pattern(path, root, pattern))
+fn matches_any_pattern(path: &Path, root: &Path, patterns: &[CompiledPattern]) -> bool {
+    patterns.iter().any(|pattern| matches_pattern(path, root, pattern))
 }
 
-fn matches_pattern(path: &Path, root: &Path, pattern: &str) -> bool {
+#[derive(Debug, Clone)]
+struct CompiledPattern {
+    cleaned: String,
+    has_wildcards: bool,
+    has_slash: bool,
+}
+
+fn compile_patterns(patterns: &[String]) -> Vec<CompiledPattern> {
+    patterns
+        .iter()
+        .filter_map(|pattern| {
+            let cleaned = pattern
+                .trim()
+                .trim_start_matches("./")
+                .trim_end_matches('/')
+                .to_string();
+            if cleaned.is_empty() {
+                return None;
+            }
+            Some(CompiledPattern {
+                has_wildcards: cleaned.contains('*') || cleaned.contains('?'),
+                has_slash: cleaned.contains('/'),
+                cleaned,
+            })
+        })
+        .collect()
+}
+
+fn matches_pattern(path: &Path, root: &Path, pattern: &CompiledPattern) -> bool {
     let normalized = path.to_string_lossy().replace('\\', "/");
-    let basename = path
-        .file_name()
-        .map(|name| name.to_string_lossy().to_string())
-        .unwrap_or_default();
-    let cleaned = pattern
-        .trim()
-        .trim_start_matches("./")
-        .trim_end_matches('/');
-    if cleaned.is_empty() {
-        return false;
-    }
-    if !cleaned.contains('*') && !cleaned.contains('?') && !cleaned.contains('/') {
+    let basename = path.file_name().and_then(|name| name.to_str()).unwrap_or_default();
+    let cleaned = pattern.cleaned.as_str();
+
+    if !pattern.has_wildcards && !pattern.has_slash {
         return normalized.split('/').any(|part| part == cleaned) || basename == cleaned;
     }
-    if !cleaned.contains('/') {
+    if !pattern.has_slash {
         return glob_match_segment(cleaned, &basename);
     }
     // Slash-containing patterns are resolved relative to the scan root first

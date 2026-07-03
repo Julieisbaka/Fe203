@@ -39,6 +39,10 @@ impl Rule for UnsafeUsageRule {
         )
     }
 
+    fn prefilter_signatures(&self) -> &'static [&'static str] {
+        &["unsafe"]
+    }
+
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
         for (line_no, line) in ctx.lines() {
@@ -90,6 +94,10 @@ impl Rule for UnsafeFnRule {
         Some(
             "before: pub unsafe fn from_raw(p: *const u8) -> T\nafter: /// # Safety\n/// `p` must point to ...\npub unsafe fn from_raw(p: *const u8) -> T",
         )
+    }
+
+    fn prefilter_signatures(&self) -> &'static [&'static str] {
+        &["unsafe", "fn"]
     }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {

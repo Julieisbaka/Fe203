@@ -10,6 +10,8 @@ General code-quality lint rules.
 | FE063 | warning | unused local variables |
 | FE064 | warning | unused constants |
 | FE065 | warning | test code with `#[test]`/async test attributes that does not reference product code |
+| FE066 | info | stale `fe203-ignore`/`fe203-ignore-file` rule IDs that do not match any finding in the file |
+| FE075 | warning | test function with assert-only logic and no product-code call/reference |
 
 ## Notes
 

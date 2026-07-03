@@ -47,6 +47,10 @@ impl Rule for CommandExecutionRule {
         Some("before: Command::new(\"sh\").arg(\"-c\").arg(cmd)\nafter: Command::new(\"ls\").arg(\"-la\")")
     }
 
+    fn prefilter_signatures(&self) -> &'static [&'static str] {
+        &["command"]
+    }
+
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
         for (line_no, line) in ctx.lines() {
@@ -99,6 +103,10 @@ impl Rule for ShellStringInjectionRule {
     }
     fn suggestion_example(&self) -> Option<&'static str> {
         Some("before: .arg(format!(\"echo {}\", user))\nafter: .arg(\"echo\").arg(user)")
+    }
+
+    fn prefilter_signatures(&self) -> &'static [&'static str] {
+        &["command", "sh", "bash", "powershell", "cmd"]
     }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {

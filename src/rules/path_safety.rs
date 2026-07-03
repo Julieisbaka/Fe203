@@ -50,6 +50,10 @@ impl Rule for PathTraversalLiteralRule {
         Some("before: base.join(\"../secret\")\nafter: if segment.contains(\"..\") { return Err(e); }")
     }
 
+    fn prefilter_signatures(&self) -> &'static [&'static str] {
+        &["join", "push", "pathbuf"]
+    }
+
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
         for (line_no, line) in ctx.lines() {
@@ -122,6 +126,10 @@ impl Rule for UnsanitizedPathInputRule {
     }
     fn suggestion_example(&self) -> Option<&'static str> {
         Some("before: base.join(user_input)\nafter: base.join(sanitize_segment(user_input)?)")
+    }
+
+    fn prefilter_signatures(&self) -> &'static [&'static str] {
+        &["join", "push"]
     }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {

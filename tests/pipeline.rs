@@ -32,6 +32,8 @@ fn config() {
     let password = "hunter2";
     let api_key = "sk-123";
     let secret = "shhh";
+    let _access_token = "tok-123";
+    let _database_url = "postgres://user:pass@db.local/app";
     //
     let _ = regex::Regex::new(r"(a+)+$");
     let _ = regex::Regex::new(r".*token.*.*");
@@ -70,7 +72,7 @@ fn full_pipeline_finds_all_requested_patterns() {
         &Config::default().include,
         &mut files,
     );
-    let findings = scan_files(&files, &rules);
+    let findings = scan_files(&files, &rules, true);
 
     let mut ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
     ids.sort();
@@ -86,6 +88,8 @@ fn full_pipeline_finds_all_requested_patterns() {
             "FE040", // password
             "FE041", // api_key
             "FE042", // secret
+            "FE043", // token
+            "FE044", // credential URL
             "FE060", // clamp-like chain
             "FE061", // empty doc comment
             "FE062", // empty comment
@@ -96,6 +100,7 @@ fn full_pipeline_finds_all_requested_patterns() {
             "FE063", // unused
             "FE064", // unused constant
             "FE065", // test without product-code reference
+            "FE075", // assert-only test without product calls
             "FE080", // nested regex quantifier
             "FE081", // suspicious regex
             "FE081", // suspicious regex
@@ -130,7 +135,7 @@ fn config_disables_categories_and_rules() {
         .collect();
     let mut files = Vec::new();
     discover_files(&dir, &config.exclude, &config.include, &mut files);
-    let findings = scan_files(&files, &rules);
+    let findings = scan_files(&files, &rules, true);
 
     let mut ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
     ids.sort();

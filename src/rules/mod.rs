@@ -14,6 +14,7 @@ pub mod shell;
 pub mod unsafe_usage;
 
 use std::path::Path;
+use std::collections::HashSet;
 
 use crate::finding::{Category, Finding, Severity};
 
@@ -21,21 +22,83 @@ use crate::finding::{Category, Finding, Severity};
 pub struct FileContext<'a> {
     pub path: &'a Path,
     pub content: &'a str,
+    line_starts: Vec<usize>,
+    token_index: HashSet<String>,
 }
 
 impl<'a> FileContext<'a> {
     pub fn new(path: &'a Path, content: &'a str) -> Self {
-        FileContext { path, content }
+        FileContext {
+            path,
+            content,
+            line_starts: build_line_starts(content),
+            token_index: build_token_index(content),
+        }
     }
 
     /// Iterates over (1-based line number, line text).
-    pub fn lines(&self) -> impl Iterator<Item = (usize, &'a str)> {
-        self.content.lines().enumerate().map(|(i, l)| (i + 1, l))
+    pub fn lines(&self) -> impl Iterator<Item = (usize, &'a str)> + '_ {
+        self.line_starts.iter().enumerate().map(|(i, start)| {
+            let next = self
+                .line_starts
+                .get(i + 1)
+                .copied()
+                .unwrap_or(self.content.len() + 1);
+            let end = next.saturating_sub(1);
+            (i + 1, &self.content[*start..end])
+        })
+    }
+
+    pub fn has_any_signature(&self, signatures: &[&str]) -> bool {
+        signatures.iter().any(|sig| self.has_signature(sig))
+    }
+
+    pub fn has_signature(&self, signature: &str) -> bool {
+        if signature.is_empty() {
+            return false;
+        }
+        if signature
+            .bytes()
+            .all(|b| b == b'_' || b.is_ascii_alphanumeric())
+        {
+            let lowered = signature.to_ascii_lowercase();
+            return self.token_index.contains(&lowered);
+        }
+        self.content.contains(signature)
     }
 }
 
+fn build_line_starts(content: &str) -> Vec<usize> {
+    let mut starts = vec![0];
+    for (idx, byte) in content.as_bytes().iter().enumerate() {
+        if *byte == b'\n' && idx + 1 < content.len() {
+            starts.push(idx + 1);
+        }
+    }
+    starts
+}
+
+fn build_token_index(content: &str) -> HashSet<String> {
+    let mut out = HashSet::new();
+    let bytes = content.as_bytes();
+    let mut idx = 0usize;
+    while idx < bytes.len() {
+        if bytes[idx] == b'_' || bytes[idx].is_ascii_alphabetic() {
+            let start = idx;
+            idx += 1;
+            while idx < bytes.len() && (bytes[idx] == b'_' || bytes[idx].is_ascii_alphanumeric()) {
+                idx += 1;
+            }
+            out.insert(content[start..idx].to_ascii_lowercase());
+        } else {
+            idx += 1;
+        }
+    }
+    out
+}
+
 /// A single, self-contained check that scans one file at a time.
-pub trait Rule {
+pub trait Rule: Sync {
     /// Stable rule identifier, e.g. `FE001`.
     fn id(&self) -> &'static str;
     /// Short human-readable name.
@@ -54,6 +117,18 @@ pub trait Rule {
     }
     /// Scans a file and returns any findings.
     fn scan(&self, ctx: &FileContext) -> Vec<Finding>;
+
+    /// Cheap substring/token signatures used to skip running expensive rules
+    /// when a file clearly cannot match them.
+    fn prefilter_signatures(&self) -> &'static [&'static str] {
+        &[]
+    }
+
+    /// Whether this rule should run for the current file context.
+    fn should_scan(&self, ctx: &FileContext) -> bool {
+        let signatures = self.prefilter_signatures();
+        signatures.is_empty() || ctx.has_any_signature(signatures)
+    }
 
     /// Convenience constructor so rule impls stay terse.
     fn finding(
@@ -258,4 +333,164 @@ pub(crate) fn word_occurrences(line: &str, word: &str) -> Vec<usize> {
 pub(crate) fn is_comment_line(line: &str) -> bool {
     let trimmed = line.trim_start();
     trimmed.starts_with("//") || trimmed.starts_with('*') || trimmed.starts_with("/*")
+}
+
+pub(crate) fn contains_ascii_case_insensitive(haystack: &str, needle: &str) -> bool {
+    let h = haystack.as_bytes();
+    let n = needle.as_bytes();
+    if n.is_empty() || n.len() > h.len() {
+        return false;
+    }
+    'outer: for start in 0..=h.len() - n.len() {
+        for offset in 0..n.len() {
+            if !h[start + offset].eq_ignore_ascii_case(&n[offset]) {
+                continue 'outer;
+            }
+        }
+        return true;
+    }
+    false
+}
+
+pub(crate) fn identifier_occurrences_ignoring_comments_and_literals(
+    content: &str,
+    name: &str,
+) -> Vec<usize> {
+    let bytes = content.as_bytes();
+    let needle = name.as_bytes();
+    let mut index = 0;
+    let mut out = Vec::new();
+
+    while index < bytes.len() {
+        match bytes[index] {
+            b'/' if index + 1 < bytes.len() && bytes[index + 1] == b'/' => {
+                index += 2;
+                while index < bytes.len() && bytes[index] != b'\n' {
+                    index += 1;
+                }
+            }
+            b'/' if index + 1 < bytes.len() && bytes[index + 1] == b'*' => {
+                index += 2;
+                let mut depth = 1;
+                while index < bytes.len() && depth > 0 {
+                    if index + 1 < bytes.len() && bytes[index] == b'/' && bytes[index + 1] == b'*' {
+                        depth += 1;
+                        index += 2;
+                    } else if index + 1 < bytes.len()
+                        && bytes[index] == b'*'
+                        && bytes[index + 1] == b'/'
+                    {
+                        depth -= 1;
+                        index += 2;
+                    } else {
+                        index += 1;
+                    }
+                }
+            }
+            b'"' => {
+                index = skip_string_literal(bytes, index + 1, b'"');
+            }
+            b'\'' => {
+                index = skip_char_literal(bytes, index + 1);
+            }
+            b'r' => {
+                if let Some(end) = skip_raw_string_literal(bytes, index) {
+                    index = end;
+                } else if is_ident_start(bytes[index]) {
+                    let start = index;
+                    index += 1;
+                    while index < bytes.len() && is_ident_continue(bytes[index]) {
+                        index += 1;
+                    }
+                    if &bytes[start..index] == needle {
+                        out.push(start);
+                    }
+                } else {
+                    index += 1;
+                }
+            }
+            byte if is_ident_start(byte) => {
+                let start = index;
+                index += 1;
+                while index < bytes.len() && is_ident_continue(bytes[index]) {
+                    index += 1;
+                }
+                if &bytes[start..index] == needle {
+                    out.push(start);
+                }
+            }
+            _ => {
+                index += 1;
+            }
+        }
+    }
+
+    out
+}
+
+fn skip_string_literal(bytes: &[u8], mut index: usize, terminator: u8) -> usize {
+    while index < bytes.len() {
+        if bytes[index] == b'\\' {
+            index += 2;
+        } else if bytes[index] == terminator {
+            return index + 1;
+        } else {
+            index += 1;
+        }
+    }
+    index
+}
+
+fn skip_char_literal(bytes: &[u8], mut index: usize) -> usize {
+    while index < bytes.len() {
+        if bytes[index] == b'\\' {
+            index += 2;
+        } else if bytes[index] == b'\'' {
+            return index + 1;
+        } else {
+            index += 1;
+        }
+    }
+    index
+}
+
+fn skip_raw_string_literal(bytes: &[u8], index: usize) -> Option<usize> {
+    let mut hash_count = 0;
+    let mut cursor = index + 1;
+    while cursor < bytes.len() && bytes[cursor] == b'#' {
+        hash_count += 1;
+        cursor += 1;
+    }
+    if cursor >= bytes.len() || bytes[cursor] != b'"' {
+        return None;
+    }
+
+    cursor += 1;
+    while cursor < bytes.len() {
+        if bytes[cursor] == b'"' {
+            let mut end = cursor + 1;
+            let mut matched = true;
+            for _ in 0..hash_count {
+                if end >= bytes.len() || bytes[end] != b'#' {
+                    matched = false;
+                    break;
+                }
+                end += 1;
+            }
+            if matched {
+                return Some(end);
+            }
+        }
+        cursor += 1;
+    }
+
+    Some(bytes.len())
+}
+
+fn is_ident_start(byte: u8) -> bool {
+    byte == b'_' || byte.is_ascii_alphabetic()
+}
+
+fn is_ident_continue(byte: u8) -> bool {
+    byte == b'_' || byte.is_ascii_alphanumeric()
 }

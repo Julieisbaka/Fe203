@@ -105,7 +105,9 @@ pub fn render_sarif(findings: &[Finding]) -> String {
         out.push_str(",\"message\":{\"text\":");
         out.push_str(&json_string(&finding.message));
         out.push_str("},\"locations\":[{\"physicalLocation\":{\"artifactLocation\":{\"uri\":");
-        out.push_str(&json_string(&finding.file.display().to_string().replace('\\', "/")));
+        out.push_str(&json_string(
+            &finding.file.display().to_string().replace('\\', "/"),
+        ));
         out.push_str("},\"region\":{\"startLine\":");
         out.push_str(&finding.line.to_string());
         out.push_str(",\"startColumn\":");
@@ -135,10 +137,7 @@ pub fn apply_severity_overrides(findings: &mut [Finding], config: &Config) {
 }
 
 pub fn baseline_lines(findings: &[Finding]) -> Vec<String> {
-    findings
-        .iter()
-        .map(finding_signature)
-        .collect::<Vec<_>>()
+    findings.iter().map(finding_signature).collect::<Vec<_>>()
 }
 
 pub fn apply_baseline(findings: &[Finding], baseline_text: &str) -> Vec<Finding> {

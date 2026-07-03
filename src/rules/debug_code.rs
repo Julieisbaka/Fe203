@@ -43,9 +43,7 @@ impl Rule for MacroRule {
                 "before: todo!();\nafter: return Err(MyError::Unimplemented);"
             }
             "dbg" => "before: dbg!(value);\nafter: tracing::debug!(?value);",
-            "panic" => {
-                "before: panic!(\"bad input\");\nafter: return Err(MyError::BadInput);"
-            }
+            "panic" => "before: panic!(\"bad input\");\nafter: return Err(MyError::BadInput);",
             _ => return None,
         })
     }
@@ -75,6 +73,10 @@ impl Rule for MacroRule {
             }
         }
         findings
+    }
+
+    fn should_scan(&self, ctx: &FileContext) -> bool {
+        ctx.has_signature(self.macro_name)
     }
 }
 

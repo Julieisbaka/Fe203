@@ -49,6 +49,8 @@ fe203 [OPTIONS] [PATH]...
 fe203                # show intro + quick-start commands
 fe203 .              # scan the current directory
 fe203 --json src/    # emit JSON for a specific path
+fe203 -j --pretty src/  # short flags are supported for common options
+fe203 --rules=FE001,FE080 --categories=debug,secrets src/
 fe203 --json --pretty src/  # emit pretty-printed JSON
 fe203 --check-syntax # opt-in cargo syntax/type check before scanning
 fe203 --max          # run cargo check + cargo test + all rules before scanning
