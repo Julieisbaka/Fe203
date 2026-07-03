@@ -4,7 +4,7 @@ mod patterns;
 mod scan;
 
 pub use discovery::{discover_files, discover_files_stream, expand_manifest_targets};
-pub use scan::{scan_files, scan_files_with_cache, ScanCacheOptions};
+pub use scan::{scan_files, scan_files_with_cache, ScanCacheOptions, ScanRun};
 
 #[cfg(test)]
 mod tests {

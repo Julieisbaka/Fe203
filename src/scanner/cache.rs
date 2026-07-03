@@ -74,13 +74,13 @@ impl ScanCache {
         }
     }
 
-    pub(crate) fn lookup(&self, file: &Path, hash: u64) -> Option<Vec<CachedFinding>> {
+    pub(crate) fn lookup<'a>(&'a self, file: &Path, hash: u64) -> Option<&'a [CachedFinding]> {
         let key = normalize_path(file);
         let cached = self.entries.get(&key)?;
         if cached.hash != hash {
             return None;
         }
-        Some(cached.findings.clone())
+        Some(&cached.findings)
     }
 
     pub(crate) fn store(&mut self, file: &Path, hash: u64, findings: &[Finding]) {

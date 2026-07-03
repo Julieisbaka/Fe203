@@ -6,11 +6,18 @@ use crate::finding::Finding;
 use crate::rules::Rule;
 use crate::scanner;
 
+/// Aggregated scan output for the CLI reporting layer.
 pub(super) struct ScanOutcome {
+    /// Number of files actually scanned in this invocation.
     pub files_scanned: usize,
+    /// Collected findings after all targets and chunks are processed.
     pub findings: Vec<Finding>,
 }
 
+/// Executes discovery and scanning across all requested targets.
+///
+/// This function streams files in chunks to keep memory bounded while still
+/// preserving deterministic output ordering from scanner internals.
 pub(super) fn execute_scan(
     targets: &[PathBuf],
     config: &Config,
@@ -21,6 +28,7 @@ pub(super) fn execute_scan(
     let mut files_scanned = 0usize;
     let mut files_discovered = 0usize;
     let mut findings = Vec::new();
+    // Chunked scanning balances throughput and memory usage on large trees.
     let chunk_size = 256usize;
     let mut chunk = Vec::with_capacity(chunk_size);
     let discover_start = Instant::now();
@@ -30,6 +38,19 @@ pub(super) fn execute_scan(
 
     let scan_fingerprint = scan_fingerprint(enabled, config, use_prefilter);
     let cache_file = default_scan_cache_file();
+    // Environment options are evaluated once per run.
+    let cache_disabled = std::env::var("FE203_NO_CACHE").is_ok();
+    let mut scan_run = scanner::ScanRun::new(
+        enabled,
+        if cache_disabled {
+            None
+        } else {
+            Some(scanner::ScanCacheOptions {
+                fingerprint: &scan_fingerprint,
+                cache_file: &cache_file,
+            })
+        },
+    );
     let scan_start = Instant::now();
 
     for target in targets {
@@ -43,19 +64,7 @@ pub(super) fn execute_scan(
             if chunk.len() >= chunk_size {
                 let current = std::mem::take(&mut chunk);
                 files_scanned += current.len();
-                let mut scanned = scanner::scan_files_with_cache(
-                    &current,
-                    enabled,
-                    use_prefilter,
-                    if std::env::var("FE203_NO_CACHE").is_ok() {
-                        None
-                    } else {
-                        Some(scanner::ScanCacheOptions {
-                            fingerprint: &scan_fingerprint,
-                            cache_file: &cache_file,
-                        })
-                    },
-                );
+                let mut scanned = scan_run.scan_chunk(&current, use_prefilter);
                 findings.append(&mut scanned);
                 if show_progress {
                     let elapsed = scan_start.elapsed().as_secs_f64().max(0.001);
@@ -72,21 +81,11 @@ pub(super) fn execute_scan(
 
     if !chunk.is_empty() {
         files_scanned += chunk.len();
-        let mut scanned = scanner::scan_files_with_cache(
-            &chunk,
-            enabled,
-            use_prefilter,
-            if std::env::var("FE203_NO_CACHE").is_ok() {
-                None
-            } else {
-                Some(scanner::ScanCacheOptions {
-                    fingerprint: &scan_fingerprint,
-                    cache_file: &cache_file,
-                })
-            },
-        );
+        let mut scanned = scan_run.scan_chunk(&chunk, use_prefilter);
         findings.append(&mut scanned);
     }
+
+    scan_run.finish();
 
     if show_progress {
         eprintln!(
@@ -112,6 +111,7 @@ pub(super) fn execute_scan(
     })
 }
 
+/// Returns the default on-disk scan cache path for the current workspace.
 fn default_scan_cache_file() -> PathBuf {
     std::env::current_dir()
         .unwrap_or_else(|_| PathBuf::from("."))
@@ -119,6 +119,7 @@ fn default_scan_cache_file() -> PathBuf {
         .join("scan-cache.v1")
 }
 
+/// Builds a deterministic fingerprint string for cache keying.
 fn scan_fingerprint(enabled: &[&dyn Rule], config: &Config, use_prefilter: bool) -> String {
     let mut parts = Vec::new();
     let mut rule_ids = enabled
@@ -172,6 +173,7 @@ fn scan_fingerprint(enabled: &[&dyn Rule], config: &Config, use_prefilter: bool)
     parts.join("|")
 }
 
+/// Renders a compact human-readable duration.
 fn format_duration(duration: Duration) -> String {
     let millis = duration.as_millis();
     if millis < 1_000 {

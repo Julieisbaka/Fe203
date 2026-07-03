@@ -1,5 +1,13 @@
 # Fe203 Changelog
 
+## `0.1.2`
+
+- Optimized scan caching to keep one cache session for the full run instead of reloading/saving per chunk.
+- Reused a single rule-ID lookup map across chunk scans to reduce repeated setup overhead.
+- Removed cache-hit cloning of cached finding vectors by reading cached entries by reference.
+- Reduced repeated environment checks in scan orchestration (`FE203_NO_CACHE` now evaluated once per run).
+- Added a built-in benchmark harness (`cargo run --bin bench_cli`) with fixture workload files under `benchmarks/fixtures/workload`.
+
 ## `0.1.1`
 
 - Refactored scanner internals into focused modules (`scanner/discovery`, `scanner/scan`, `scanner/cache`, `scanner/patterns`) while preserving public scanner APIs.

@@ -63,3 +63,23 @@ fe203 --list-rules   # print the built-in rule index
   configuration, suppressions, architecture, rules, and roadmap).
 - [docs/changelog.md](docs/changelog.md) — release history.
 - [docs/contributing.md](docs/contributing.md) — contribution guidance.
+
+## Benchmarking
+
+Use the built-in benchmark harness to measure end-to-end CLI scan time against
+the fixture workload in `benchmarks/workload`.
+
+Run with defaults (5 measured iterations):
+
+```sh
+cargo run --bin bench_cli
+```
+
+Run against a custom path and iteration count:
+
+```sh
+cargo run --bin bench_cli -- benchmarks/workload 10
+```
+
+The harness prints per-run timing and a summary (`min`, `max`, `mean`,
+`median`).

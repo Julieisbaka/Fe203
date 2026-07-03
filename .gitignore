@@ -4,6 +4,7 @@ debug
 target
 
 package/
+.fe203/
 
 # Generated files
 *.exe
