@@ -45,6 +45,10 @@ pub fn run(args: &[String]) -> i32 {
         eprintln!("error: --json and --sarif cannot be used together");
         return 2;
     }
+    if opts.pretty && !opts.json && !opts.sarif {
+        eprintln!("error: --pretty requires --json or --sarif");
+        return 2;
+    }
     if opts.baseline.is_some() && opts.init_baseline.is_some() {
         eprintln!("error: --baseline and --init-baseline cannot be used together");
         return 2;
@@ -169,9 +173,17 @@ pub fn run(args: &[String]) -> i32 {
     }
 
     if opts.sarif {
-        println!("{}", reporting::render_sarif(&findings));
+        if opts.pretty {
+            println!("{}", reporting::render_sarif_pretty(&findings));
+        } else {
+            println!("{}", reporting::render_sarif(&findings));
+        }
     } else if opts.json {
-        println!("{}", reporting::render_json(&findings));
+        if opts.pretty {
+            println!("{}", reporting::render_json_pretty(&findings));
+        } else {
+            println!("{}", reporting::render_json(&findings));
+        }
     } else {
         print!(
             "{}",

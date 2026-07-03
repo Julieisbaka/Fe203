@@ -1,5 +1,10 @@
 # Fe203 Changelog
 
+## `0.0.5`
+
+- Added `--pretty` for formatted JSON/SARIF output.
+- Added FE065 (`test-without-product-reference`) to flag test code that never references product code.
+
 ## `0.0.4`
 
 - Added opt-in CLI syntax checking via `--check-syntax`.

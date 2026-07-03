@@ -1,5 +1,6 @@
 //! End-to-end test: fixture files on disk -> discovery -> rules -> findings.
 // fe203-ignore-file all
+// The nature of this file is that it violates many rules, so that we cant test the tool against it, as such we ignore all warnings.
 
 use std::path::PathBuf;
 
@@ -48,6 +49,11 @@ fn shell_and_paths(user: &str) {
     let _ = base.join("../secret");
     let _ = base.join(user_input);
 }
+
+#[test]
+fn disconnected_test() {
+    assert_eq!(2, 1 + 1);
+}
 "#;
 
 #[test]
@@ -89,6 +95,7 @@ fn full_pipeline_finds_all_requested_patterns() {
             "FE063", // secret
             "FE063", // unused
             "FE064", // unused constant
+            "FE065", // test without product-code reference
             "FE080", // nested regex quantifier
             "FE081", // suspicious regex
             "FE081", // suspicious regex

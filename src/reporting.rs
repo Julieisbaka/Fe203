@@ -78,6 +78,10 @@ pub fn render_json(findings: &[Finding]) -> String {
     out
 }
 
+pub fn render_json_pretty(findings: &[Finding]) -> String {
+    pretty_json(&render_json(findings))
+}
+
 pub fn render_sarif(findings: &[Finding]) -> String {
     let mut out = String::new();
     out.push_str("{\"$schema\":\"https://json.schemastore.org/sarif-2.1.0.json\",\"version\":\"2.1.0\",\"runs\":[{");
@@ -116,6 +120,10 @@ pub fn render_sarif(findings: &[Finding]) -> String {
 
     out.push_str("]}]}");
     out
+}
+
+pub fn render_sarif_pretty(findings: &[Finding]) -> String {
+    pretty_json(&render_sarif(findings))
 }
 
 pub fn apply_severity_overrides(findings: &mut [Finding], config: &Config) {
@@ -183,6 +191,59 @@ fn json_string(s: &str) -> String {
     out
 }
 
+fn pretty_json(input: &str) -> String {
+    let mut out = String::with_capacity(input.len() + input.len() / 2);
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+
+    for c in input.chars() {
+        if in_string {
+            out.push(c);
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+
+        match c {
+            '"' => {
+                in_string = true;
+                out.push(c);
+            }
+            '{' | '[' => {
+                out.push(c);
+                depth += 1;
+                out.push('\n');
+                out.push_str(&"  ".repeat(depth));
+            }
+            '}' | ']' => {
+                depth = depth.saturating_sub(1);
+                out.push('\n');
+                out.push_str(&"  ".repeat(depth));
+                out.push(c);
+            }
+            ',' => {
+                out.push(c);
+                out.push('\n');
+                out.push_str(&"  ".repeat(depth));
+            }
+            ':' => {
+                out.push(':');
+                out.push(' ');
+            }
+            c if c.is_whitespace() => {}
+            _ => out.push(c),
+        }
+    }
+
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -230,10 +291,24 @@ mod tests {
     }
 
     #[test]
+    fn pretty_json_output_contains_newlines() {
+        let pretty = render_json_pretty(&[sample()]);
+        assert!(pretty.contains('\n'));
+        assert!(pretty.contains("\"rule_id\": \"FE001\""));
+    }
+
+    #[test]
     fn sarif_output_contains_schema_and_rule_id() {
         let sarif = render_sarif(&[sample()]);
         assert!(sarif.contains("\"version\":\"2.1.0\""));
         assert!(sarif.contains("\"ruleId\":\"FE001\""));
+    }
+
+    #[test]
+    fn pretty_sarif_output_contains_newlines() {
+        let sarif = render_sarif_pretty(&[sample()]);
+        assert!(sarif.contains('\n'));
+        assert!(sarif.contains("\"ruleId\": \"FE001\""));
     }
 
     #[test]

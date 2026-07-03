@@ -1,6 +1,6 @@
 //! General lint-style rules: clamp-like expressions, unused bindings,
 //! and empty comments/docs.
-// fe203-ignore-file FE060, FE061, FE062
+// fe203-ignore-file FE060, FE061, FE062, FE065
 
 use std::collections::HashSet;
 
@@ -295,6 +295,59 @@ impl Rule for UnusedConstantRule {
     }
 }
 
+/// Detects test-bearing files that do not appear to reference product code.
+pub struct TestWithoutProductReferenceRule;
+
+impl Rule for TestWithoutProductReferenceRule {
+    fn id(&self) -> &'static str {
+        "FE065"
+    }
+
+    fn name(&self) -> &'static str {
+        "test-without-product-reference"
+    }
+
+    fn description(&self) -> &'static str {
+        "tests that never reference product code can become disconnected from real behavior"
+    }
+
+    fn category(&self) -> Category {
+        Category::Lint
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Warning
+    }
+
+    fn suggestion(&self) -> Option<&'static str> {
+        Some("Reference crate/module code in test bodies so assertions validate real behavior.")
+    }
+
+    fn suggestion_example(&self) -> Option<&'static str> {
+        Some("before: #[test] fn t(){ assert_eq!(2,1+1); }\nafter: #[test] fn t(){ assert!(crate::parser::parse(\"x\").is_ok()); }")
+    }
+
+    fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
+        let Some(line_no) = first_test_attr_line(ctx.content) else {
+            return Vec::new();
+        };
+        if is_rule_ignored(ctx, line_no, self.id(), self.name(), self.category()) {
+            return Vec::new();
+        }
+        if has_product_reference(ctx.content) {
+            return Vec::new();
+        }
+        let snippet = ctx.content.lines().nth(line_no.saturating_sub(1)).unwrap_or("");
+        vec![self.finding(
+            ctx,
+            line_no,
+            1,
+            "test code found without any product-code reference".to_string(),
+            snippet,
+        )]
+    }
+}
+
 /// All lint-style rules.
 pub fn rules() -> Vec<Box<dyn Rule>> {
     vec![
@@ -303,7 +356,38 @@ pub fn rules() -> Vec<Box<dyn Rule>> {
         Box::new(EmptyCommentRule),
         Box::new(UnusedVariableRule),
         Box::new(UnusedConstantRule),
+        Box::new(TestWithoutProductReferenceRule),
     ]
+}
+
+fn first_test_attr_line(content: &str) -> Option<usize> {
+    const TEST_ATTR_MARKERS: &[&str] = &[
+        "#[test]",
+        "#[tokio::test]",
+        "#[actix_rt::test]",
+        "#[actix_web::test]",
+        "#[async_std::test]",
+    ];
+    content.lines().enumerate().find_map(|(idx, line)| {
+        let trimmed = line.trim();
+        if TEST_ATTR_MARKERS.iter().any(|m| trimmed.contains(m)) {
+            Some(idx + 1)
+        } else {
+            None
+        }
+    })
+}
+
+fn has_product_reference(content: &str) -> bool {
+    const PRODUCT_REF_MARKERS: &[&str] = &[
+        "crate::",
+        "super::",
+        "fe203::",
+        "env!(\"CARGO_BIN_EXE_fe203\")",
+        "Command::new(\"fe203\")",
+        "std::process::Command::new(\"fe203\")",
+    ];
+    PRODUCT_REF_MARKERS.iter().any(|marker| content.contains(marker))
 }
 
 /// True if the doc-comment line before or after `line_no` uses the same
@@ -610,5 +694,36 @@ mod tests {
         let findings = scan_all("///\nfn f() {}\n");
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule_id, "FE061");
+    }
+
+    #[test]
+    fn detects_test_without_product_reference() {
+        let findings = scan_all("#[test]\nfn t() { assert_eq!(2, 1 + 1); }\n");
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule_id, "FE065");
+    }
+
+    #[test]
+    fn ignores_test_with_crate_reference() {
+        let findings = scan_all("#[test]\nfn t() { assert!(crate::parser::parse(\"x\").is_ok()); }\n");
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn ignores_test_with_binary_invocation_reference() {
+        let findings = scan_all("#[tokio::test]\nasync fn t() { let _ = std::process::Command::new(\"fe203\"); }\n");
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn ignores_non_test_files() {
+        let findings = scan_all("fn helper() { assert_eq!(2, 1 + 1); }\n");
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn respects_ignore_for_test_reference_rule() {
+        let findings = scan_all("// fe203-ignore FE065\n#[test]\nfn t() { assert_eq!(2, 1 + 1); }\n");
+        assert!(findings.is_empty());
     }
 }

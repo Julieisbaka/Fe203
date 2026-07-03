@@ -68,6 +68,13 @@ Renders findings as SARIF v2.1.0 JSON for CI/code-scanning systems.
 
 `--json` and `--sarif` are mutually exclusive.
 
+## `--pretty`
+
+Pretty-prints machine-readable output for readability.
+
+- Valid only with `--json` or `--sarif`
+- Does not affect human-readable output mode
+
 ## `--baseline <FILE>`
 
 Loads a baseline file and suppresses findings that already exist in it.

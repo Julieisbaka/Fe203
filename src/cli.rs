@@ -33,6 +33,7 @@ pub fn usage_text() -> String {
         ),
         ("--json", "Emit findings as JSON"),
         ("--sarif", "Emit findings as SARIF JSON"),
+        ("--pretty", "Pretty-print JSON/SARIF output (use with --json or --sarif)"),
         ("--baseline <FILE>", "Suppress findings already present in baseline file"),
         (
             "--init-baseline [FILE]",
@@ -107,6 +108,7 @@ pub struct CliOptions {
     pub config: Option<PathBuf>,
     pub json: bool,
     pub sarif: bool,
+    pub pretty: bool,
     pub list_rules: bool,
     pub explain: Option<String>,
     pub init_config: Option<PathBuf>,
@@ -149,6 +151,7 @@ pub fn parse(args: &[String]) -> Result<CliOptions, String> {
             "-V" | "--version" => opts.version = true,
             "--json" => opts.json = true,
             "--sarif" => opts.sarif = true,
+            "--pretty" => opts.pretty = true,
             "--list-rules" => opts.list_rules = true,
             "--check-syntax" => opts.check_syntax = true,
             "--max" => opts.max = true,
@@ -305,6 +308,7 @@ mod tests {
             "fe080",
             "--init-config",
             "--sarif",
+            "--pretty",
             "--check-syntax",
             "--max",
             "--baseline",
@@ -318,6 +322,7 @@ mod tests {
         assert_eq!(opts.explain, Some("FE080".to_string()));
         assert_eq!(opts.init_config, Some(PathBuf::from("fe203.toml")));
         assert!(opts.sarif);
+        assert!(opts.pretty);
         assert!(opts.check_syntax);
         assert!(opts.max);
         assert_eq!(opts.baseline, Some(PathBuf::from("existing.baseline")));
