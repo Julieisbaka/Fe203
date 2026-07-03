@@ -1,5 +1,16 @@
 # Fe203 Changelog
 
+## `0.2.0`
+
+- Added a lightweight syntax-aware parser for annotated test functions and invocations, improving FE065/FE075 without introducing third-party AST dependencies.
+- Expanded the syntax-aware parser to carry function ranges and invocation locations, and reused it for FE076/FE077 so fallible-call checks handle multi-line chains and ignore comment/string noise.
+- Added method-chain parsing to the syntax layer and rebuilt FE101 shell-injection detection on it, matching shell programs, flags, and dynamic arguments per `.arg(...)` call across lines.
+- Rebuilt FE121/FE122 path-join detection on method-chain parsing so multi-line `.join(...)`/`.push(...)` calls are detected and comment/string noise is ignored.
+- Moved FE080/FE081 regex literal extraction to statement-level constructor sites so multi-line `Regex::new(...)` calls are analyzed and non-constructor pattern text is ignored.
+- Added FE078 (`test-without-assertions`) to catch test functions that call product code without asserting on behavior.
+- Added FE079 (`ignored-product-call-result`) to flag bare statements that drop product-call results silently.
+- Reworked the `lint` unused-binding module into a conventional `unused/` directory with shared FE063/FE064 scan plumbing and broader parser-boundary tests.
+
 ## `0.1.7`
 
 - Split the `lint` unused-binding implementation into focused submodules for FE063/FE064 rule logic and shared statement/scope helpers without changing rule behavior.

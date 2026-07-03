@@ -1,10 +1,11 @@
 //! General lint-style rules: clamp-like expressions, unused bindings,
 //! and empty comments/docs.
-// fe203-ignore-file FE060, FE061, FE062, FE065, FE066, FE075, FE076, FE077
+// fe203-ignore-file FE060, FE061, FE062, FE065, FE066, FE075, FE076, FE077, FE079
 
 mod clamp;
 mod comments;
 mod fallible;
+mod ignored_result;
 pub(crate) mod suppressions;
 mod test_reference;
 mod unused;
@@ -12,8 +13,12 @@ mod unused;
 use crate::rules::Rule;
 use clamp::ClampLikePatternRule;
 use comments::{EmptyCommentRule, EmptyDocCommentRule};
+use ignored_result::IgnoredProductResultRule;
 use suppressions::DeadSuppressionCommentRule;
-use test_reference::{AssertOnlyTestsWithoutProductCallsRule, TestWithoutProductReferenceRule};
+use test_reference::{
+    AssertOnlyTestsWithoutProductCallsRule, TestWithoutProductReferenceRule,
+    TestWithoutAssertionsRule,
+};
 use unused::{UnusedConstantRule, UnusedVariableRule};
 
 /// All lint-style rules.
@@ -27,6 +32,8 @@ pub fn rules() -> Vec<Box<dyn Rule>> {
         Box::new(TestWithoutProductReferenceRule),
         Box::new(DeadSuppressionCommentRule),
         Box::new(AssertOnlyTestsWithoutProductCallsRule),
+        Box::new(TestWithoutAssertionsRule),
+        Box::new(IgnoredProductResultRule),
     ];
     rules.extend(fallible::rules());
     rules
@@ -194,5 +201,12 @@ mod tests {
             scan_all("#[test]\nfn real() { assert!(crate::parser::parse(\"x\").is_ok()); }\n");
         let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
         assert!(ids.iter().all(|id| *id != "FE075"));
+    }
+
+    #[test]
+    fn flags_test_with_product_call_but_no_assert() {
+        let findings = scan_all("#[test]\nfn smoke() { crate::parser::parse(\"x\"); }\n");
+        let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
+        assert!(ids.iter().any(|id| *id == "FE078"));
     }
 }

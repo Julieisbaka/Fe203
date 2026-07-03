@@ -3,6 +3,7 @@
 // fe203-ignore-file FE120, FE121, FE122
 
 use crate::finding::{Category, Finding, Severity};
+use crate::rules::syntax::collect_method_chains;
 use crate::rules::{is_rule_ignored, FileContext, Rule};
 
 const JOIN_CALLS: &[&str] = &[".join(", ".push("];
@@ -148,30 +149,36 @@ impl Rule for UnsanitizedPathInputRule {
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
-        for (line_no, line) in ctx.lines() {
-            if is_rule_ignored(ctx, line_no, self.id(), self.name(), self.category()) {
-                continue;
-            }
-            for call in JOIN_CALLS {
-                for (column, arg) in call_arguments(line, call) {
-                    let trimmed = arg.trim();
-                    if trimmed.starts_with('"') || trimmed.is_empty() {
-                        continue;
-                    }
-                    let lower = trimmed.to_lowercase();
-                    if UNTRUSTED_KEYWORDS.iter().any(|kw| lower.contains(kw)) {
-                        findings.push(self.finding(
-                            ctx,
-                            line_no,
-                            column,
-                            format!(
-                                "`{}` call joins a path with untrusted-looking input `{}`",
-                                call.trim_end_matches('('),
-                                trimmed
-                            ),
-                            line,
-                        ));
-                    }
+        let lines = ctx.lines().collect::<Vec<_>>();
+        for chain in collect_method_chains(ctx.content) {
+            for call in &chain.calls {
+                if call.name != "join" && call.name != "push" {
+                    continue;
+                }
+                if is_rule_ignored(ctx, call.line_no, self.id(), self.name(), self.category()) {
+                    continue;
+                }
+                let trimmed = call.args.trim();
+                if trimmed.starts_with('"') || trimmed.is_empty() {
+                    continue;
+                }
+                let lower = trimmed.to_lowercase();
+                if UNTRUSTED_KEYWORDS.iter().any(|kw| lower.contains(kw)) {
+                    let snippet = lines
+                        .iter()
+                        .find(|(line_no, _)| *line_no == call.line_no)
+                        .map(|(_, line)| *line)
+                        .unwrap_or("");
+                    findings.push(self.finding(
+                        ctx,
+                        call.line_no,
+                        call.column,
+                        format!(
+                            "`.{}` call joins a path with untrusted-looking input `{}`",
+                            call.name, trimmed
+                        ),
+                        snippet,
+                    ));
                 }
             }
         }
@@ -215,40 +222,49 @@ impl Rule for ArchiveEntryTraversalRule {
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
         let lines = ctx.lines().collect::<Vec<_>>();
-        for (idx, (line_no, line)) in lines.iter().enumerate() {
-            if is_rule_ignored(ctx, *line_no, self.id(), self.name(), self.category()) {
-                continue;
-            }
+        for chain in collect_method_chains(ctx.content) {
+            for call in &chain.calls {
+                if call.name != "join" && call.name != "push" {
+                    continue;
+                }
+                if is_rule_ignored(ctx, call.line_no, self.id(), self.name(), self.category()) {
+                    continue;
+                }
+                let idx = call.line_no.saturating_sub(1);
+                let context = extraction_context(&lines, idx);
+                if !ARCHIVE_CONTEXT_KEYWORDS
+                    .iter()
+                    .any(|keyword| context.contains(keyword))
+                {
+                    continue;
+                }
 
-            let context = extraction_context(&lines, idx);
-            if !ARCHIVE_CONTEXT_KEYWORDS
-                .iter()
-                .any(|keyword| context.contains(keyword))
-            {
-                continue;
-            }
-
-            for call in JOIN_CALLS {
-                for (column, arg) in call_arguments(line, call) {
-                    let trimmed = arg.trim();
-                    let lower = trimmed.to_ascii_lowercase();
-                    if trimmed.starts_with('"')
-                        || archive_arg_looks_safe(&lines, idx, line, trimmed, &lower)
-                    {
-                        continue;
-                    }
-                    if ARCHIVE_ENTRY_KEYWORDS.iter().any(|keyword| lower.contains(keyword)) {
-                        findings.push(self.finding(
-                            ctx,
-                            *line_no,
-                            column,
-                            format!(
-                                "archive extraction joins destination path with entry-derived input `{}`",
-                                trimmed
-                            ),
-                            line,
-                        ));
-                    }
+                let line = lines
+                    .iter()
+                    .find(|(line_no, _)| *line_no == call.line_no)
+                    .map(|(_, line)| *line)
+                    .unwrap_or("");
+                let trimmed = call.args.trim();
+                let lower = trimmed.to_ascii_lowercase();
+                if trimmed.starts_with('"')
+                    || archive_arg_looks_safe(&lines, idx, line, trimmed, &lower)
+                {
+                    continue;
+                }
+                if ARCHIVE_ENTRY_KEYWORDS
+                    .iter()
+                    .any(|keyword| lower.contains(keyword))
+                {
+                    findings.push(self.finding(
+                        ctx,
+                        call.line_no,
+                        call.column,
+                        format!(
+                            "archive extraction joins destination path with entry-derived input `{}`",
+                            trimmed
+                        ),
+                        line,
+                    ));
                 }
             }
         }

@@ -33,6 +33,10 @@ Changed in `0.1.4`: the rule treats common safe archive patterns as explicit val
 paths derived from APIs such as `enclosed_name()` and joined extraction paths
 that are canonicalized and checked with `.starts_with(...)` before use.
 
+Changed in `0.2.0`: FE121 and FE122 now use syntax-aware method-chain parsing,
+so `.join(...)`/`.push(...)` calls split across lines are detected and
+join-like text inside comments or string literals is ignored.
+
 **Suggestion:** validate archive entry names and reject `..` or absolute paths
 before constructing extraction destinations.
 

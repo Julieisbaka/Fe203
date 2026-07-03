@@ -1,7 +1,7 @@
 use crate::finding::{Category, Finding, Severity};
 use crate::rules::{is_rule_ignored, FileContext, Rule};
 
-use super::helpers::{has_nested_quantifier, regex_literals_in_line};
+use super::helpers::{has_nested_quantifier, regex_call_sites};
 
 /// Detects nested quantifiers like `(a+)+` or `(.*)*` that are often a code
 /// smell and can be expensive in some regex engines.
@@ -42,20 +42,27 @@ impl Rule for NestedQuantifierRegexRule {
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
-        for (line_no, line) in ctx.lines() {
-            if is_rule_ignored(ctx, line_no, self.id(), self.name(), self.category()) {
+        let lines = ctx.lines().collect::<Vec<_>>();
+        for call in regex_call_sites(&lines) {
+            if is_rule_ignored(ctx, call.line_no, self.id(), self.name(), self.category()) {
                 continue;
             }
-            for (column, pattern) in regex_literals_in_line(line) {
-                if has_nested_quantifier(&pattern) {
-                    findings.push(self.finding(
-                        ctx,
-                        line_no,
-                        column,
-                        format!("suspicious nested regex quantifier in pattern `{pattern}`"),
-                        line,
-                    ));
-                }
+            let Some(pattern) = &call.pattern else {
+                continue;
+            };
+            if has_nested_quantifier(pattern) {
+                let snippet = lines
+                    .iter()
+                    .find(|(line_no, _)| *line_no == call.line_no)
+                    .map(|(_, line)| *line)
+                    .unwrap_or("");
+                findings.push(self.finding(
+                    ctx,
+                    call.line_no,
+                    call.column,
+                    format!("suspicious nested regex quantifier in pattern `{pattern}`"),
+                    snippet,
+                ));
             }
         }
         findings

@@ -12,25 +12,6 @@ pub(super) struct RegexCallSite {
     pub pattern: Option<String>,
 }
 
-pub(super) fn regex_literals_in_line(line: &str) -> Vec<(usize, String)> {
-    let mut found = Vec::new();
-    for marker in REGEX_MARKERS {
-        let mut start = 0;
-        while let Some(pos) = line[start..].find(marker) {
-            let idx = start + pos + marker.len();
-            let rest = &line[idx..];
-            let leading_ws = rest.len() - rest.trim_start().len();
-            if let Some(pattern) = parse_rust_string_literal(rest.trim_start()) {
-                found.push((idx + leading_ws + 1, pattern));
-            }
-            start = idx;
-        }
-    }
-    found.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
-    found.dedup_by(|a, b| a.0 == b.0 && a.1 == b.1);
-    found
-}
-
 pub(super) fn regex_call_sites(lines: &[(usize, &str)]) -> Vec<RegexCallSite> {
     let mut found = Vec::new();
     for (idx, (_, line)) in lines.iter().enumerate() {
@@ -102,10 +83,6 @@ pub(super) fn complete_string_literal(input: &str) -> Option<String> {
     } else {
         None
     }
-}
-
-fn parse_rust_string_literal(input: &str) -> Option<String> {
-    parse_string_literal_len(input).map(|(pattern, _)| pattern)
 }
 
 fn parse_string_literal_len(input: &str) -> Option<(String, usize)> {

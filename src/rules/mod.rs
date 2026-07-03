@@ -11,6 +11,7 @@ pub mod path_safety;
 pub mod regex_checks;
 pub mod secrets;
 pub mod shell;
+pub(crate) mod syntax;
 pub mod unsafe_usage;
 
 use std::collections::HashSet;

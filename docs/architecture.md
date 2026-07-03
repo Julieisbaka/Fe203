@@ -1,9 +1,11 @@
 # Architecture
 
 Fe203 is intentionally modular, std-only, and text-first. It does not build a
-Rust AST and does not perform whole-program dataflow analysis. That keeps the
-tool small and fast, but it also means it is best at simple, high-signal
-heuristics rather than deep semantic analysis.
+full Rust AST and does not perform whole-program dataflow analysis. That keeps
+the tool small and fast, but it also means it is best at simple, high-signal
+heuristics rather than deep semantic analysis. For a few rules where raw text
+matching is too noisy, Fe203 now uses lightweight hand-rolled syntax-aware
+parsing for specific constructs such as annotated test functions.
 
 ## Module Layout
 
@@ -31,6 +33,8 @@ the `shell` and `path` families) plug into this same structure.
 
 - Regex heuristics are heuristic, not semantic regex analysis.
 - Text-based scanning can flag intentional matches in literals, tests, or docs.
+- Some rules use lightweight syntax-aware parsing, but Fe203 still does not do
+  full type resolution, macro expansion, or borrow-aware name analysis.
 - Unused-variable detection now follows multi-line bindings and common
   block-scoped shadow chains, but it is still heuristic and may miss more
   complex macro-generated or control-flow-sensitive cases.

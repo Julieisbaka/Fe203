@@ -1,5 +1,6 @@
 use crate::finding::{Category, Finding, Severity};
 use crate::rules::{is_rule_ignored, FileContext, Rule};
+use crate::rules::syntax::{collect_invocations, extract_annotated_functions, InvocationKind};
 
 /// Detects test-bearing files that do not appear to reference product code.
 pub struct TestWithoutProductReferenceRule;
@@ -38,13 +39,14 @@ impl Rule for TestWithoutProductReferenceRule {
     }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
-        let Some(line_no) = first_test_attr_line(ctx.content) else {
+        let test_functions = extract_test_functions(ctx.content);
+        let Some(line_no) = test_functions.first().map(|test_fn| test_fn.line_no) else {
             return Vec::new();
         };
         if is_rule_ignored(ctx, line_no, self.id(), self.name(), self.category()) {
             return Vec::new();
         }
-        if has_product_reference(ctx.content) {
+        if test_functions.iter().any(|test_fn| has_product_reference(test_fn.body)) {
             return Vec::new();
         }
         let snippet = ctx
@@ -65,6 +67,9 @@ impl Rule for TestWithoutProductReferenceRule {
 /// Detects individual test functions that only perform trivial assertions and
 /// do not call into product code.
 pub struct AssertOnlyTestsWithoutProductCallsRule;
+
+/// Detects tests that call product code but never assert on behavior.
+pub struct TestWithoutAssertionsRule;
 
 impl Rule for AssertOnlyTestsWithoutProductCallsRule {
     fn id(&self) -> &'static str {
@@ -132,6 +137,66 @@ impl Rule for AssertOnlyTestsWithoutProductCallsRule {
     }
 }
 
+impl Rule for TestWithoutAssertionsRule {
+    fn id(&self) -> &'static str {
+        "FE078"
+    }
+
+    fn name(&self) -> &'static str {
+        "test-without-assertions"
+    }
+
+    fn description(&self) -> &'static str {
+        "tests that call product code but never assert on outputs or effects can silently pass"
+    }
+
+    fn category(&self) -> Category {
+        Category::Lint
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Warning
+    }
+
+    fn suggestion(&self) -> Option<&'static str> {
+        Some("Assert on a concrete output, error, or side effect so the test validates behavior.")
+    }
+
+    fn suggestion_example(&self) -> Option<&'static str> {
+        Some("before: #[test] fn t() { crate::parser::parse(\"x\"); }\nafter: #[test] fn t() { assert!(crate::parser::parse(\"x\").is_ok()); }")
+    }
+
+    fn prefilter_signatures(&self) -> &'static [&'static str] {
+        &["test"]
+    }
+
+    fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
+        let mut findings = Vec::new();
+        for test_fn in extract_test_functions(ctx.content) {
+            if is_rule_ignored(
+                ctx,
+                test_fn.line_no,
+                self.id(),
+                self.name(),
+                self.category(),
+            ) {
+                continue;
+            }
+            if !has_direct_product_call(test_fn.body) || contains_assert_macro(test_fn.body) {
+                continue;
+            }
+            findings.push(self.finding(
+                ctx,
+                test_fn.line_no,
+                1,
+                "test function calls product code without any assertion".to_string(),
+                test_fn.header,
+            ));
+        }
+        findings
+    }
+}
+
 struct TestFunction<'a> {
     line_no: usize,
     header: &'a str,
@@ -139,130 +204,58 @@ struct TestFunction<'a> {
 }
 
 fn extract_test_functions(content: &str) -> Vec<TestFunction<'_>> {
-    let mut out = Vec::new();
-    let mut pending_attr = false;
-    let mut line_start = 0usize;
-
-    for (idx, line) in content.lines().enumerate() {
-        let line_no = idx + 1;
-        let trimmed = line.trim();
-        if TEST_ATTR_MARKERS.iter().any(|m| trimmed.contains(m)) {
-            pending_attr = true;
-        } else if pending_attr && (trimmed.starts_with("fn ") || trimmed.contains(" fn ")) {
-            if let Some(open_rel) = content[line_start..].find('{') {
-                let open = line_start + open_rel;
-                if let Some(close) = find_matching_brace(content, open) {
-                    let body_start = open.saturating_add(1);
-                    let body = &content[body_start..close];
-                    out.push(TestFunction {
-                        line_no,
-                        header: line,
-                        body,
-                    });
-                    pending_attr = false;
-                }
-            }
-        } else if !trimmed.starts_with("#[") && !trimmed.is_empty() {
-            pending_attr = false;
-        }
-
-        line_start += line.len() + 1;
-    }
-
-    out
-}
-
-fn find_matching_brace(content: &str, open: usize) -> Option<usize> {
-    let bytes = content.as_bytes();
-    let mut depth = 0usize;
-    let mut idx = open;
-    while idx < bytes.len() {
-        match bytes[idx] {
-            b'{' => depth += 1,
-            b'}' => {
-                if depth == 0 {
-                    return None;
-                }
-                depth -= 1;
-                if depth == 0 {
-                    return Some(idx);
-                }
-            }
-            _ => {}
-        }
-        idx += 1;
-    }
-    None
+    extract_annotated_functions(content, TEST_ATTR_MARKERS)
+        .into_iter()
+        .map(|function| TestFunction {
+            line_no: function.line_no,
+            header: function.header,
+            body: function.body,
+        })
+        .collect()
 }
 
 fn contains_assert_macro(body: &str) -> bool {
-    ASSERT_MACROS
-        .iter()
-        .any(|name| body.contains(&format!("{name}!")))
+    collect_invocations(body).into_iter().any(|invocation| {
+        invocation.kind == InvocationKind::Macro
+            && ASSERT_MACROS.iter().any(|name| *name == invocation.path)
+    })
 }
 
 fn assert_only_expression_style(body: &str) -> bool {
-    let bytes = body.as_bytes();
-    let mut idx = 0;
-    while idx < bytes.len() {
-        if is_ident_start(bytes[idx]) {
-            let start = idx;
-            idx += 1;
-            while idx < bytes.len() && is_ident_continue(bytes[idx]) {
-                idx += 1;
-            }
-            let ident = &body[start..idx];
-
-            let mut cursor = idx;
-            while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
-                cursor += 1;
-            }
-
-            if cursor < bytes.len() && bytes[cursor] == b'!' {
-                if !ASSERT_MACROS.iter().any(|allowed| allowed == &ident) {
-                    return false;
-                }
-            } else if cursor < bytes.len() && bytes[cursor] == b'(' {
-                return false;
-            }
-        } else {
-            idx += 1;
-        }
-    }
-    true
-}
-
-fn first_test_attr_line(content: &str) -> Option<usize> {
-    const TEST_ATTR_MARKERS: &[&str] = &[
-        "#[test]",
-        "#[tokio::test]",
-        "#[actix_rt::test]",
-        "#[actix_web::test]",
-        "#[async_std::test]",
-    ];
-    content.lines().enumerate().find_map(|(idx, line)| {
-        let trimmed = line.trim();
-        if TEST_ATTR_MARKERS.iter().any(|m| trimmed.contains(m)) {
-            Some(idx + 1)
-        } else {
-            None
-        }
+    collect_invocations(body).into_iter().all(|invocation| {
+        invocation.kind == InvocationKind::Macro
+            && ASSERT_MACROS.iter().any(|allowed| *allowed == invocation.path)
     })
 }
 
 fn has_product_reference(content: &str) -> bool {
-    const PRODUCT_REF_MARKERS: &[&str] = &[
-        "crate::",
-        "super::",
-        "self::",
-        "fe203::",
-        "env!(\"CARGO_BIN_EXE_fe203\")",
-        "Command::new(\"fe203\")",
-        "std::process::Command::new(\"fe203\")",
-    ];
-    PRODUCT_REF_MARKERS
-        .iter()
-        .any(|marker| content.contains(marker))
+    collect_invocations(content).into_iter().any(|invocation| {
+        invocation.path.starts_with("crate::")
+            || invocation.path.starts_with("super::")
+            || invocation.path.starts_with("self::")
+            || invocation.path.starts_with("fe203::")
+            || (invocation.kind == InvocationKind::Macro
+                && invocation.path == "env"
+                && invocation
+                    .args
+                    .is_some_and(|args| args.contains("\"CARGO_BIN_EXE_fe203\"")))
+            || (invocation.kind == InvocationKind::Call
+                && (invocation.path == "Command::new"
+                    || invocation.path == "std::process::Command::new")
+                && invocation
+                    .args
+                    .is_some_and(|args| args.trim_start().starts_with("\"fe203\"")))
+    })
+}
+
+fn has_direct_product_call(content: &str) -> bool {
+    collect_invocations(content).into_iter().any(|invocation| {
+        invocation.kind == InvocationKind::Call
+            && (invocation.path.starts_with("crate::")
+                || invocation.path.starts_with("super::")
+                || invocation.path.starts_with("self::")
+                || invocation.path.starts_with("fe203::"))
+    })
 }
 
 const TEST_ATTR_MARKERS: &[&str] = &[
@@ -282,10 +275,54 @@ const ASSERT_MACROS: &[&str] = &[
     "debug_assert_ne",
 ];
 
-fn is_ident_start(byte: u8) -> bool {
-    byte == b'_' || byte.is_ascii_alphabetic()
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
 
-fn is_ident_continue(byte: u8) -> bool {
-    byte == b'_' || byte.is_ascii_alphanumeric()
+    fn scan_with_rules(content: &str) -> Vec<Finding> {
+        let ctx = FileContext::new(Path::new("test.rs"), content);
+        vec![
+            Box::new(TestWithoutProductReferenceRule) as Box<dyn Rule>,
+            Box::new(AssertOnlyTestsWithoutProductCallsRule),
+            Box::new(TestWithoutAssertionsRule),
+        ]
+        .iter()
+        .flat_map(|rule| rule.scan(&ctx))
+        .collect()
+    }
+
+    #[test]
+    fn ignores_product_reference_in_comments_and_strings() {
+        let findings = scan_with_rules(
+            "#[test]\nfn t() {\n    let _ = \"crate::fake()\";\n    // crate::fake()\n    assert_eq!(2, 1 + 1);\n}\n",
+        );
+        let ids: Vec<&str> = findings.iter().map(|finding| finding.rule_id).collect();
+        assert!(ids.iter().any(|id| *id == "FE065"));
+        assert!(ids.iter().any(|id| *id == "FE075"));
+    }
+
+    #[test]
+    fn ignores_test_with_braces_inside_strings() {
+        let findings = scan_with_rules(
+            "#[test]\nfn t() {\n    let _ = \"{ not code }\";\n    assert!(crate::parser::parse(\"x\").is_ok());\n}\n",
+        );
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn keeps_command_new_fe203_as_product_reference() {
+        let findings = scan_with_rules(
+            "#[test]\nfn t() {\n    let _ = std::process::Command::new(\"fe203\");\n}\n",
+        );
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn flags_product_call_without_assertion() {
+        let findings = scan_with_rules(
+            "#[test]\nfn t() {\n    crate::parser::parse(\"x\");\n}\n",
+        );
+        assert!(findings.iter().any(|finding| finding.rule_id == "FE078"));
+    }
 }

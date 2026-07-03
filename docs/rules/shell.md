@@ -31,6 +31,11 @@ Command::new("sh")
     .arg(format!("echo {}", user));
 ```
 
+Changed in `0.2.0`: detection is built on syntax-aware method-chain parsing
+instead of flattened statement text, so shell program names, flags, and
+dynamic arguments are matched per `.arg(...)` call and shell-like text inside
+comments or unrelated string literals no longer triggers the rule.
+
 **Suggestion:** prefer passing arguments individually via `.arg()` instead of
 invoking a shell with an interpolated string.
 

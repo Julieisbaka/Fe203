@@ -3,17 +3,11 @@
 // fe203-ignore-file FE100, FE101
 
 use crate::finding::{Category, Finding, Severity};
+use crate::rules::syntax::collect_method_chains;
 use crate::rules::{is_rule_ignored, word_occurrences, FileContext, Rule};
 
-const SHELL_PROGRAMS: &[&str] = &[
-    "\"sh\"",
-    "\"bash\"",
-    "\"cmd\"",
-    "\"cmd.exe\"",
-    "\"powershell\"",
-    "\"pwsh\"",
-];
-const SHELL_FLAGS: &[&str] = &["\"-c\"", "\"/c\"", "\"/C\"", "\"-Command\""];
+const SHELL_PROGRAMS: &[&str] = &["sh", "bash", "cmd", "cmd.exe", "powershell", "pwsh"];
+const SHELL_FLAGS: &[&str] = &["-c", "/c", "/C", "-Command"];
 const DYNAMIC_MARKERS: &[&str] = &["format!(", "concat!(", ".to_string()", "push_str(", " + "];
 const ENV_VAR_MARKERS: &[&str] = &["std::env::var(", "env::var(", "std::env::args(", "env::args("];
 
@@ -113,31 +107,68 @@ impl Rule for ShellStringInjectionRule {
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
         let env_bound_vars = env_bound_variable_names(ctx.content);
-        let lines = ctx.lines().collect::<Vec<_>>();
-        for (idx, (line_no, line)) in lines.iter().enumerate() {
-            if is_rule_ignored(ctx, *line_no, self.id(), self.name(), self.category()) {
+        for chain in collect_method_chains(ctx.content) {
+            if !chain.root.ends_with("Command::new") {
                 continue;
             }
-            let statement = statement_from_lines(&lines, idx);
-            let has_shell = SHELL_PROGRAMS.iter().any(|p| statement.contains(p));
-            let has_flag = SHELL_FLAGS.iter().any(|f| statement.contains(f));
-            let has_dynamic = DYNAMIC_MARKERS.iter().any(|m| statement.contains(m));
-            let has_env_input = ENV_VAR_MARKERS.iter().any(|m| statement.contains(m))
-                || env_bound_vars
-                    .iter()
-                    .any(|name| statement_contains_identifier(&statement, name));
-            if has_shell && has_flag && (has_dynamic || has_env_input) {
+            if is_rule_ignored(ctx, chain.line_no, self.id(), self.name(), self.category()) {
+                continue;
+            }
+            let invokes_shell = chain
+                .root_args
+                .is_some_and(|args| is_string_literal_of(args, SHELL_PROGRAMS));
+            if !invokes_shell {
+                continue;
+            }
+            let mut saw_shell_flag = false;
+            let mut risky_arg = None;
+            for call in &chain.calls {
+                if call.name != "arg" && call.name != "args" {
+                    continue;
+                }
+                if is_string_literal_of(call.args, SHELL_FLAGS) {
+                    saw_shell_flag = true;
+                    continue;
+                }
+                let dynamic = DYNAMIC_MARKERS.iter().any(|m| call.args.contains(m));
+                let env_input = ENV_VAR_MARKERS.iter().any(|m| call.args.contains(m))
+                    || env_bound_vars
+                        .iter()
+                        .any(|name| statement_contains_identifier(call.args, name));
+                if saw_shell_flag && (dynamic || env_input) {
+                    risky_arg = Some(call);
+                    break;
+                }
+            }
+            if let Some(call) = risky_arg {
+                let snippet = ctx
+                    .content
+                    .lines()
+                    .nth(chain.line_no.saturating_sub(1))
+                    .unwrap_or("");
                 findings.push(self.finding(
                     ctx,
-                    *line_no,
-                    line.find("Command").map(|idx| idx + 1).unwrap_or(1),
+                    call.line_no,
+                    call.column,
                     "shell command built from dynamic input found".to_string(),
-                    line,
+                    snippet,
                 ));
             }
         }
         findings
     }
+}
+
+/// True if `args` is exactly one string literal whose value is in `allowed`.
+fn is_string_literal_of(args: &str, allowed: &[&str]) -> bool {
+    let trimmed = args.trim();
+    let Some(inner) = trimmed
+        .strip_prefix('"')
+        .and_then(|rest| rest.strip_suffix('"'))
+    else {
+        return false;
+    };
+    !inner.contains('"') && allowed.contains(&inner)
 }
 
 /// All shell rules.
@@ -202,20 +233,6 @@ fn line_contains_identifier(line: &str, name: &str) -> bool {
 
 fn statement_contains_identifier(statement: &str, name: &str) -> bool {
     line_contains_identifier(statement, name)
-}
-
-fn statement_from_lines(lines: &[(usize, &str)], start_idx: usize) -> String {
-    let mut statement = String::new();
-    for (_, line) in lines.iter().skip(start_idx).take(8) {
-        if !statement.is_empty() {
-            statement.push(' ');
-        }
-        statement.push_str(line.trim());
-        if line.contains(';') {
-            break;
-        }
-    }
-    statement
 }
 
 #[cfg(test)]

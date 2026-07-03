@@ -11,6 +11,10 @@ Rules that flag risky or inefficient regex usage.
 
 ## Notes
 
+- **FE080** and **FE081**: Changed in `0.2.0`. Pattern literals are now taken
+  from statement-level `Regex::new(...)`/`RegexBuilder::new(...)` constructor
+  sites, so multi-line constructor calls are analyzed and pattern-like text
+  outside a regex constructor is ignored.
 - **FE082**: Changed in `0.1.5`. Now inspects the actual `Regex::new(...)` or `RegexBuilder::new(...)`
   argument expression instead of relying on broad substring matches. Fixed
   literal expressions, including compile-time `concat!(...)` of string

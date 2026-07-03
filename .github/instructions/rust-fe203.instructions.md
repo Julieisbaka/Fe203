@@ -6,7 +6,7 @@ applyTo: "src/**/*.rs,tests/**/*.rs"
 Rust implementation instructions for FE203:
 
 - Keep implementation std-only unless the user explicitly requests dependencies.
-- Keep scanning heuristic and text-based; avoid introducing AST or heavyweight analysis unless requested.
+- Keep scanning heuristic and text-based by default; syntax-aware parsing is acceptable when explicitly requested or when it materially improves rule signal. Avoid heavyweight AST frameworks unless requested.
 - Maintain stable rule registry behavior in src/rules/mod.rs.
 - For new or changed rule behavior:
   - add or update unit tests in the rule module

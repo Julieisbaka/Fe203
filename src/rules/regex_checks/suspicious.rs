@@ -1,7 +1,7 @@
 use crate::finding::{Category, Finding, Severity};
 use crate::rules::{is_rule_ignored, FileContext, Rule};
 
-use super::helpers::{is_suspicious_regex, regex_literals_in_line};
+use super::helpers::{is_suspicious_regex, regex_call_sites};
 
 /// Detects broad or ambiguous regex constructs like repeated wildcards and
 /// empty alternations.
@@ -42,20 +42,27 @@ impl Rule for SuspiciousRegexRule {
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
-        for (line_no, line) in ctx.lines() {
-            if is_rule_ignored(ctx, line_no, self.id(), self.name(), self.category()) {
+        let lines = ctx.lines().collect::<Vec<_>>();
+        for call in regex_call_sites(&lines) {
+            if is_rule_ignored(ctx, call.line_no, self.id(), self.name(), self.category()) {
                 continue;
             }
-            for (column, pattern) in regex_literals_in_line(line) {
-                if is_suspicious_regex(&pattern) {
-                    findings.push(self.finding(
-                        ctx,
-                        line_no,
-                        column,
-                        format!("suspicious regex pattern `{pattern}`"),
-                        line,
-                    ));
-                }
+            let Some(pattern) = &call.pattern else {
+                continue;
+            };
+            if is_suspicious_regex(pattern) {
+                let snippet = lines
+                    .iter()
+                    .find(|(line_no, _)| *line_no == call.line_no)
+                    .map(|(_, line)| *line)
+                    .unwrap_or("");
+                findings.push(self.finding(
+                    ctx,
+                    call.line_no,
+                    call.column,
+                    format!("suspicious regex pattern `{pattern}`"),
+                    snippet,
+                ));
             }
         }
         findings

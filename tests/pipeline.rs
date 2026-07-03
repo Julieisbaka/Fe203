@@ -68,6 +68,11 @@ fn extract_archive(archive_entry_path: &str) {
 fn disconnected_test() {
     assert_eq!(2, 1 + 1);
 }
+
+#[test]
+fn smoke_test_without_assertions() {
+    crate::parser::parse("x");
+}
 "#;
 
 #[test]
@@ -114,12 +119,13 @@ fn full_pipeline_finds_all_requested_patterns() {
             "FE063", // unused
             "FE063", // unused_right
             "FE064", // unused constant
-            "FE065", // test without product-code reference
             "FE075", // assert-only test without product calls
             "FE076", // unwrap outside tests
             "FE076", // expect outside tests
             "FE076", // shell_home unwrap outside tests
             "FE077", // map_err(|_| ...)
+            "FE078", // product call in test without assertions
+            "FE079", // dropped product-call result
             "FE080", // nested regex quantifier
             "FE081", // suspicious regex
             "FE081", // suspicious regex
