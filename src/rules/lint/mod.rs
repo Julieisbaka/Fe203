@@ -1,9 +1,10 @@
 //! General lint-style rules: clamp-like expressions, unused bindings,
 //! and empty comments/docs.
-// fe203-ignore-file FE060, FE061, FE062, FE065, FE066, FE075
+// fe203-ignore-file FE060, FE061, FE062, FE065, FE066, FE075, FE076, FE077
 
 mod clamp;
 mod comments;
+mod fallible;
 pub(crate) mod suppressions;
 mod test_reference;
 mod unused;
@@ -17,7 +18,7 @@ use unused::{UnusedConstantRule, UnusedVariableRule};
 
 /// All lint-style rules.
 pub fn rules() -> Vec<Box<dyn Rule>> {
-    vec![
+    let mut rules: Vec<Box<dyn Rule>> = vec![
         Box::new(ClampLikePatternRule),
         Box::new(EmptyDocCommentRule),
         Box::new(EmptyCommentRule),
@@ -26,7 +27,9 @@ pub fn rules() -> Vec<Box<dyn Rule>> {
         Box::new(TestWithoutProductReferenceRule),
         Box::new(DeadSuppressionCommentRule),
         Box::new(AssertOnlyTestsWithoutProductCallsRule),
-    ]
+    ];
+    rules.extend(fallible::rules());
+    rules
 }
 
 #[cfg(test)]

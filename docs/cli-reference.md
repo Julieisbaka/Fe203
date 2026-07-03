@@ -205,6 +205,9 @@ Each finding includes:
 - `snippet`
 - `suggestion`
 
+Human output prints each finding with its own `path:line:column` prefix so the
+location stays visible even when multiple findings come from the same file.
+
 Human output also prints a `help:` line when the rule provides a suggestion.
 
 ## Exit Codes

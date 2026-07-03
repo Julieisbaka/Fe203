@@ -26,6 +26,9 @@ fn work() {
     dbg!(42);
     panic!("nope");
     let bounded = value.max(min).min(max);
+    let cfg = load_config().unwrap();
+    let _ = parse_value().expect("value");
+    let _ = result.map_err(|_| "masked");
 }
 
 fn config() {
@@ -54,6 +57,11 @@ fn shell_and_paths(user: &str) {
     let base = std::path::PathBuf::from("data");
     let _ = base.join("../secret");
     let _ = base.join(user_input);
+}
+
+fn extract_archive(archive_entry_path: &str) {
+    let dest = std::path::PathBuf::from("out");
+    let _ = dest.join(archive_entry_path);
 }
 
 #[test]
@@ -98,6 +106,7 @@ fn full_pipeline_finds_all_requested_patterns() {
             "FE061", // empty doc comment
             "FE062", // empty comment
             "FE063", // bounded
+            "FE063", // cfg
             "FE063", // valid_name
             "FE063", // password
             "FE063", // api_key
@@ -107,6 +116,10 @@ fn full_pipeline_finds_all_requested_patterns() {
             "FE064", // unused constant
             "FE065", // test without product-code reference
             "FE075", // assert-only test without product calls
+            "FE076", // unwrap outside tests
+            "FE076", // expect outside tests
+            "FE076", // shell_home unwrap outside tests
+            "FE077", // map_err(|_| ...)
             "FE080", // nested regex quantifier
             "FE081", // suspicious regex
             "FE081", // suspicious regex
@@ -119,6 +132,7 @@ fn full_pipeline_finds_all_requested_patterns() {
             "FE101", // shell env var injection
             "FE120", // path traversal literal
             "FE121", // unsanitized path input
+            "FE122", // archive entry join during extraction
         ]
     );
 

@@ -5,7 +5,7 @@ Rules covering shell command construction risks.
 | ID | Severity | Name | Detects |
 |----|----------|------|---------|
 | FE100 | info | `command-execution` | presence of `Command::new(` / `std::process::Command::new(` |
-| FE101 | high | `shell-string-injection` | a shell interpreter invoked with a shell flag and a dynamically built command string |
+| FE101 | high | `shell-string-injection` | a shell interpreter invoked with a shell flag and a dynamically built or environment-fed command string |
 
 ## FE100 — `command-execution`
 
@@ -15,12 +15,21 @@ a closer look.
 
 ## FE101 — `shell-string-injection`
 
-Flags a line where:
+Flags a command builder where:
 
 1. A shell interpreter (`sh`, `bash`, `cmd`, `cmd.exe`, `powershell`, `pwsh`)
    is invoked with a shell flag (`-c`, `/c`, `/C`, `-Command`), **and**
-2. The command string on that line is built dynamically (`format!`,
-   `concat!`, `.to_string()`, `push_str`, or string `+` concatenation).
+2. The command string in that statement is built dynamically (`format!`,
+   `concat!`, `.to_string()`, `push_str`, or string `+` concatenation), or fed
+   from environment-derived input.
+
+The rule now follows common multi-line builder chains such as:
+
+```rust
+Command::new("sh")
+    .arg("-c")
+    .arg(format!("echo {}", user));
+```
 
 **Suggestion:** prefer passing arguments individually via `.arg()` instead of
 invoking a shell with an interpolated string.

@@ -1,5 +1,15 @@
 # Fe203 Changelog
 
+## `0.1.4`
+
+- Updated human CLI output so every finding line includes its own file path and line/column location instead of relying on grouped file headers.
+- Tightened FE101 (`shell-string-injection`) to follow common multi-line `Command::new(...).arg(...).arg(...)` builder chains instead of only single-line shell command construction.
+- Kept FE101 detection for environment-derived shell command input and documented the broader statement-aware behavior.
+- Added FE076 to flag `unwrap`/`expect`-style calls outside test code.
+- Added FE077 to flag error-erasing patterns such as `map_err(|_| ...)`.
+- Added FE122 to flag archive extraction joins that use entry-derived path input without clear validation.
+- Refined FE122 to treat `enclosed_name()`-style archive APIs and canonicalized extraction path prefix checks as explicit safe patterns.
+
 ## `0.1.3`
 
 - Optimized scan fingerprint construction to write directly into a preallocated `String` with `push_str`, reducing temporary allocations in the cache-key path.

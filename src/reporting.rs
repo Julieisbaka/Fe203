@@ -6,21 +6,14 @@ use std::collections::HashSet;
 use crate::config::Config;
 use crate::finding::Finding;
 
-/// Human-readable report, grouped by file.
+/// Human-readable report with per-finding file locations.
 pub fn render_human(findings: &[Finding], files_scanned: usize, rules_enabled: usize) -> String {
     let mut out = String::new();
-    let mut current_file: Option<&std::path::Path> = None;
 
     for finding in findings {
-        if current_file != Some(finding.file.as_path()) {
-            if current_file.is_some() {
-                out.push('\n');
-            }
-            out.push_str(&format!("{}\n", finding.file.display()));
-            current_file = Some(finding.file.as_path());
-        }
         out.push_str(&format!(
-            "  {}:{}  {:<8} {}  {} [{}]\n",
+            "{}:{}:{}  {:<8} {}  {} [{}]\n",
+            finding.file.display(),
             finding.line,
             finding.column,
             finding.severity.name(),
@@ -270,11 +263,16 @@ mod tests {
     #[test]
     fn human_report_shows_location() {
         let report = render_human(&[sample()], 3, 9);
-        assert!(report.contains("src/main.rs"));
-        assert!(report.contains("2:5"));
+        assert!(report.contains("src/main.rs:2:5"));
         assert!(report.contains("FE001"));
         assert!(report.contains("help: Implement the code path or remove the placeholder macro."));
         assert!(report.contains("1 finding(s) in 3 file(s) scanned (9 rule(s) enabled)"));
+    }
+
+    #[test]
+    fn human_report_repeats_file_for_each_finding() {
+        let report = render_human(&[sample(), sample()], 3, 9);
+        assert_eq!(report.matches("src/main.rs:2:5").count(), 2);
     }
 
     #[test]
