@@ -121,56 +121,106 @@ fn default_scan_cache_file() -> PathBuf {
 
 /// Builds a deterministic fingerprint string for cache keying.
 fn scan_fingerprint(enabled: &[&dyn Rule], config: &Config, use_prefilter: bool) -> String {
-    let mut parts = Vec::new();
-    let mut rule_ids = enabled
+    let mut out = String::with_capacity(512);
+    let mut first = true;
+
+    let mut rule_parts: Vec<(&str, &str, &str, &str)> = enabled
         .iter()
         .map(|rule| {
-            format!(
-                "{}:{}:{}:{}",
+            (
                 rule.id(),
                 rule.name(),
                 rule.category().name(),
-                rule.severity().name()
+                rule.severity().name(),
             )
         })
-        .collect::<Vec<_>>();
-    rule_ids.sort();
-    parts.extend(rule_ids);
+        .collect();
+    rule_parts.sort_unstable();
+    for (id, name, category, severity) in rule_parts {
+        append_part(&mut out, &mut first);
+        out.push_str(id);
+        out.push(':');
+        out.push_str(name);
+        out.push(':');
+        out.push_str(category);
+        out.push(':');
+        out.push_str(severity);
+    }
 
-    let mut rulesets = config
+    let mut rulesets: Vec<(&str, bool)> = config
         .rulesets
         .iter()
-        .map(|(k, v)| format!("rs:{k}={v}"))
-        .collect::<Vec<_>>();
-    rulesets.sort();
-    parts.extend(rulesets);
+        .map(|(key, value)| (key.as_str(), *value))
+        .collect();
+    rulesets.sort_unstable_by(|a, b| a.0.cmp(b.0));
+    for (key, value) in rulesets {
+        append_part(&mut out, &mut first);
+        out.push_str("rs:");
+        out.push_str(key);
+        out.push('=');
+        out.push_str(if value { "true" } else { "false" });
+    }
 
-    let mut rules = config
+    let mut rules: Vec<(&str, bool)> = config
         .rules
         .iter()
-        .map(|(k, v)| format!("r:{k}={v}"))
-        .collect::<Vec<_>>();
-    rules.sort();
-    parts.extend(rules);
+        .map(|(key, value)| (key.as_str(), *value))
+        .collect();
+    rules.sort_unstable_by(|a, b| a.0.cmp(b.0));
+    for (key, value) in rules {
+        append_part(&mut out, &mut first);
+        out.push_str("r:");
+        out.push_str(key);
+        out.push('=');
+        out.push_str(if value { "true" } else { "false" });
+    }
 
-    let mut severity = config
+    let mut severity: Vec<(&str, &str)> = config
         .severity
         .iter()
-        .map(|(k, v)| format!("s:{k}={}", v.name()))
-        .collect::<Vec<_>>();
-    severity.sort();
-    parts.extend(severity);
+        .map(|(key, value)| (key.as_str(), value.name()))
+        .collect();
+    severity.sort_unstable_by(|a, b| a.0.cmp(b.0));
+    for (key, value) in severity {
+        append_part(&mut out, &mut first);
+        out.push_str("s:");
+        out.push_str(key);
+        out.push('=');
+        out.push_str(value);
+    }
 
-    let mut exclude = config.exclude.clone();
-    exclude.sort();
-    parts.push(format!("exclude:{}", exclude.join(",")));
+    append_part(&mut out, &mut first);
+    out.push_str("exclude:");
+    append_csv_sorted(&mut out, &config.exclude);
 
-    let mut include = config.include.clone();
-    include.sort();
-    parts.push(format!("include:{}", include.join(",")));
+    append_part(&mut out, &mut first);
+    out.push_str("include:");
+    append_csv_sorted(&mut out, &config.include);
 
-    parts.push(format!("prefilter:{use_prefilter}"));
-    parts.join("|")
+    append_part(&mut out, &mut first);
+    out.push_str("prefilter:");
+    out.push_str(if use_prefilter { "true" } else { "false" });
+
+    out
+}
+
+fn append_part(out: &mut String, first: &mut bool) {
+    if *first {
+        *first = false;
+    } else {
+        out.push('|');
+    }
+}
+
+fn append_csv_sorted(out: &mut String, values: &[String]) {
+    let mut sorted: Vec<&str> = values.iter().map(String::as_str).collect();
+    sorted.sort_unstable();
+    for (idx, value) in sorted.iter().enumerate() {
+        if idx > 0 {
+            out.push(',');
+        }
+        out.push_str(value);
+    }
 }
 
 /// Renders a compact human-readable duration.

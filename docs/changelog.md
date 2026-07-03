@@ -1,5 +1,10 @@
 # Fe203 Changelog
 
+## `0.1.3`
+
+- Optimized scan fingerprint construction to write directly into a preallocated `String` with `push_str`, reducing temporary allocations in the cache-key path.
+- Integrated benchmark mode into the main CLI via `fe203 --benchmark [N] <TARGET>`.
+
 ## `0.1.2`
 
 - Optimized scan caching to keep one cache session for the full run instead of reloading/saving per chunk.

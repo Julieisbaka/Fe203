@@ -14,7 +14,7 @@ General engineering rules:
 
 Documentation update policy:
 - When CLI flags, output formats, config keys, or behavior changes, update docs in the same change.
-- Keep these files consistent when relevant: docs/cli-reference.md, docs/configuration.md, docs/getting-started.md, docs/changelog.md, docs/roadmap.md, README.md.
+- Keep these files consistent when relevant: docs/cli-reference.md, docs/configuration.md, docs/getting-started.md, docs/changelog.md, README.md.
 - Include concise, practical examples for user-facing features.
 
 Styling and writing guidance:

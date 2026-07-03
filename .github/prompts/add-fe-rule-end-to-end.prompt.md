@@ -1,5 +1,5 @@
 ---
-mode: "agent"
+agent: "agent"
 description: "Add a new FE rule end-to-end: implement rule, register it, add tests, and update docs/changelog."
 ---
 
@@ -32,7 +32,6 @@ Required documentation updates:
 1. Update the matching docs/rules/*.md file.
 2. Update docs/cli-reference.md if output or flags changed.
 3. Add changelog entry in docs/changelog.md.
-4. Update docs/roadmap.md if implementing a roadmap item.
 
 Output requirements:
 - Summarize changed files.
