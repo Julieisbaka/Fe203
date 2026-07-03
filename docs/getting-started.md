@@ -15,6 +15,12 @@ Install locally:
 cargo install --path .
 ```
 
+Upgrade an existing local install:
+
+```sh
+cargo install --path . --force
+```
+
 Install from release binaries:
 
 1. Download the matching archive from GitHub Releases.
@@ -52,6 +58,13 @@ Run maximum validation mode (checks + tests + all rules):
 
 ```sh
 fe203 --max
+```
+
+Benchmark repeated scans against a folder:
+
+```sh
+fe203 --benchmark
+fe203 --benchmark 10 benchmarks/workload
 ```
 
 ## Your First Config

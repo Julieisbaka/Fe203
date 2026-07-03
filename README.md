@@ -23,6 +23,12 @@ cargo install --path .
 # then run: fe203 --version
 ```
 
+Upgrade an existing Cargo-installed copy:
+
+```sh
+cargo install --path . --force
+```
+
 Install from GitHub release binaries:
 
 1. Open the project Releases page.
@@ -30,7 +36,9 @@ Install from GitHub release binaries:
 3. Extract and run `fe203` (or `fe203.exe`) once.
 
 On Windows, Fe203 attempts to add its executable folder to your user `PATH`
-automatically on first run. Open a new terminal after first run.
+automatically on first run and now prioritizes its own executable directory to
+reduce stale older copies shadowing newer installs. Open a new terminal after
+first run or after reinstalling.
 
 Set `FE203_NO_AUTO_PATH=1` to disable this behavior.
 
@@ -72,7 +80,7 @@ the workload folder in `benchmarks/workload`.
 Run with defaults (5 measured iterations):
 
 ```sh
-fe203 --benchmark benchmarks/workload
+fe203 --benchmark
 ```
 
 Run against a custom path and iteration count:

@@ -18,6 +18,15 @@ pub(super) fn ensure_exe_dir_in_path() {
         if !is_fe203_executable(&exe) {
             return;
         }
+        if is_development_executable_path(&exe) {
+            return;
+        }
+        if is_cargo_bin_executable_path(&exe) {
+            return;
+        }
+        if path_resolves_current_exe(&exe) {
+            return;
+        }
         let Some(dir) = exe.parent() else {
             return;
         };
@@ -27,23 +36,23 @@ pub(super) fn ensure_exe_dir_in_path() {
             return;
         }
 
-        match set_user_path_via_powershell(&dir_str) {
+        match prioritize_user_path_via_powershell(&dir_str) {
             Some(true) => {
-                append_to_process_path(&dir_str);
+                prioritize_process_path(&dir_str);
                 eprintln!(
-                    "info: added {} to your user PATH; open a new terminal to use fe203 globally",
+                    "info: prioritized {} in your user PATH; open a new terminal to use this fe203 globally",
                     dir.display()
                 );
             }
             Some(false) => {
-                // The persistent user PATH already has this directory, but the current
-                // terminal session may still be stale.
-                append_to_process_path(&dir_str);
+                // The persistent user PATH is already correct, but the current terminal
+                // session may still be stale.
+                prioritize_process_path(&dir_str);
             }
             None => {
                 // Best effort: make fe203 available in this process even if persisting
                 // the user PATH failed.
-                append_to_process_path(&dir_str);
+                prioritize_process_path(&dir_str);
                 eprintln!(
                     "warning: could not update user PATH automatically; add {} to your PATH manually",
                     dir.display()
@@ -60,6 +69,34 @@ fn is_fe203_executable(path: &std::path::Path) -> bool {
         .unwrap_or(false)
 }
 
+fn is_development_executable_path(path: &std::path::Path) -> bool {
+    let parts = path
+        .components()
+        .map(|component| component.as_os_str().to_string_lossy().to_ascii_lowercase())
+        .collect::<Vec<_>>();
+
+    parts
+        .windows(2)
+        .any(|pair| pair[0] == "target" && (pair[1] == "debug" || pair[1] == "release"))
+}
+
+#[cfg(windows)]
+fn is_cargo_bin_executable_path(path: &std::path::Path) -> bool {
+    let normalized = normalize_path_entry(&path.to_string_lossy());
+    if normalized.contains("/.cargo/bin/") || normalized.contains("\\.cargo\\bin\\") {
+        return true;
+    }
+
+    if let Ok(cargo_home) = std::env::var("CARGO_HOME") {
+        let cargo_bin = format!("{}\\bin", cargo_home.trim_end_matches(['\\', '/']));
+        if normalized.starts_with(&normalize_path_entry(&cargo_bin)) {
+            return true;
+        }
+    }
+
+    false
+}
+
 fn auto_path_disabled() -> bool {
     std::env::var("FE203_NO_AUTO_PATH")
         .map(|v| {
@@ -71,31 +108,36 @@ fn auto_path_disabled() -> bool {
 
 #[cfg(windows)]
 fn process_path_contains_dir(dir: &str) -> bool {
-    let target = dir.trim_end_matches(['\\', '/']).to_ascii_lowercase();
-    std::env::var("PATH")
-        .ok()
-        .map(|path| {
-            path.split(';').any(|entry| {
-                entry
-                    .trim()
-                    .trim_end_matches(['\\', '/'])
-                    .eq_ignore_ascii_case(&target)
-            })
-        })
+    let target = normalize_path_entry(dir);
+    path_entries().into_iter().any(|entry| entry == target)
+}
+
+#[cfg(windows)]
+fn path_resolves_current_exe(exe: &std::path::Path) -> bool {
+    let Some(file_name) = exe.file_name() else {
+        return false;
+    };
+    let target = canonical_or_normalized(exe);
+
+    path_entries()
+        .into_iter()
+        .map(std::path::PathBuf::from)
+        .map(|dir| dir.join(file_name))
+        .find(|candidate| candidate.is_file())
+        .map(|candidate| canonical_or_normalized(&candidate) == target)
         .unwrap_or(false)
 }
 
 #[cfg(windows)]
-fn append_to_process_path(dir: &str) {
-    if process_path_contains_dir(dir) {
-        return;
-    }
-    let existing = std::env::var("PATH").unwrap_or_default();
-    let new_path = if existing.trim().is_empty() {
-        dir.to_string()
-    } else {
-        format!("{};{}", existing.trim_end_matches(';'), dir)
-    };
+fn prioritize_process_path(dir: &str) {
+    let target = normalize_path_entry(dir);
+    let mut parts = path_entries()
+        .into_iter()
+        .filter(|entry| entry != &target)
+        .map(std::path::PathBuf::from)
+        .collect::<Vec<_>>();
+    parts.insert(0, std::path::PathBuf::from(dir));
+    let new_path = std::env::join_paths(parts).unwrap_or_else(|_| dir.into());
     // SAFETY: this process intentionally updates its own PATH environment variable.
     unsafe {
         std::env::set_var("PATH", new_path);
@@ -103,10 +145,10 @@ fn append_to_process_path(dir: &str) {
 }
 
 #[cfg(windows)]
-fn set_user_path_via_powershell(dir: &str) -> Option<bool> {
+fn prioritize_user_path_via_powershell(dir: &str) -> Option<bool> {
     let escaped = ps_single_quote_escape(dir);
     let script = format!(
-        "$d='{escaped}';$p=[Environment]::GetEnvironmentVariable('Path','User');$parts=@();if($p){{$parts=$p -split ';' | ForEach-Object {{$_.Trim().TrimEnd('\\')}} | Where-Object {{$_}}}};$dn=$d.TrimEnd('\\');if($parts -contains $dn){{exit 10}};$n=if([string]::IsNullOrWhiteSpace($p)){{$d}}else{{$p.TrimEnd(';')+';'+$d}};[Environment]::SetEnvironmentVariable('Path',$n,'User');"
+        "$d='{escaped}';$dn=$d.Trim().TrimEnd('\\');$p=[Environment]::GetEnvironmentVariable('Path','User');$parts=@();if($p){{$parts=$p -split ';' | ForEach-Object {{$_.Trim().TrimEnd('\\')}} | Where-Object {{$_}}}};if($parts.Count -gt 0 -and $parts[0].ToLowerInvariant() -eq $dn.ToLowerInvariant()){{exit 10}};$parts=@($dn)+($parts | Where-Object {{$_.ToLowerInvariant() -ne $dn.ToLowerInvariant()}});$n=($parts -join ';');[Environment]::SetEnvironmentVariable('Path',$n,'User');"
     );
 
     let status = Command::new("powershell")
@@ -129,6 +171,44 @@ fn set_user_path_via_powershell(dir: &str) -> Option<bool> {
     } else {
         None
     }
+}
+
+#[cfg(windows)]
+fn path_entries() -> Vec<String> {
+    let Some(raw) = std::env::var_os("PATH") else {
+        return Vec::new();
+    };
+
+    let parsed = std::env::split_paths(&raw)
+        .map(|entry| normalize_path_entry(&entry.to_string_lossy()))
+        .filter(|entry| !entry.is_empty())
+        .collect::<Vec<_>>();
+
+    if !parsed.is_empty() {
+        return parsed;
+    }
+
+    raw.to_string_lossy()
+        .split(';')
+        .map(normalize_path_entry)
+        .filter(|entry| !entry.is_empty())
+        .collect()
+}
+
+#[cfg(windows)]
+fn canonical_or_normalized(path: &std::path::Path) -> String {
+    std::fs::canonicalize(path)
+        .map(|resolved| normalize_path_entry(&resolved.to_string_lossy()))
+        .unwrap_or_else(|_| normalize_path_entry(&path.to_string_lossy()))
+}
+
+#[cfg(windows)]
+fn normalize_path_entry(input: &str) -> String {
+    input
+        .trim()
+        .trim_matches('"')
+        .trim_end_matches(['\\', '/'])
+        .to_ascii_lowercase()
 }
 
 #[cfg(windows)]
@@ -167,6 +247,29 @@ mod tests {
         assert!(!is_fe203_executable(Path::new(r"C:\tools\pipeline.exe")));
     }
 
+    #[test]
+    fn development_executable_path_is_detected() {
+        assert!(is_development_executable_path(Path::new(
+            r"C:\repo\target\debug\fe203.exe"
+        )));
+        assert!(is_development_executable_path(Path::new(
+            r"C:\repo\target\release\fe203.exe"
+        )));
+        assert!(!is_development_executable_path(Path::new(
+            r"C:\Users\caspe\.cargo\bin\fe203.exe"
+        )));
+    }
+
+    #[test]
+    fn cargo_bin_executable_path_is_detected() {
+        assert!(is_cargo_bin_executable_path(Path::new(
+            r"C:\Users\caspe\.cargo\bin\fe203.exe"
+        )));
+        assert!(!is_cargo_bin_executable_path(Path::new(
+            r"C:\repo\target\debug\fe203.exe"
+        )));
+    }
+
     #[cfg(windows)]
     #[test]
     fn dir_match_ignores_case_and_trailing_slash() {
@@ -176,5 +279,17 @@ mod tests {
         }
         assert!(process_path_contains_dir(r"c:\tools\fe203\"));
         assert!(!process_path_contains_dir(r"c:\missing"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn prioritize_process_path_moves_dir_to_front() {
+        // SAFETY: test-local environment mutation.
+        unsafe {
+            std::env::set_var("PATH", r"C:\Users\caspe\.cargo\bin;C:\Tools\Fe203;C:\Other");
+        }
+        prioritize_process_path(r"C:\Tools\Fe203");
+        let path = std::env::var("PATH").unwrap();
+        assert!(path.starts_with(r"C:\Tools\Fe203;"));
     }
 }

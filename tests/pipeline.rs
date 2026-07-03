@@ -30,23 +30,27 @@ fn work() {
 
 fn config() {
     let password = "hunter2";
-    let api_key = "sk-123";
+    let api_key = "sk_live_123";
     let secret = "shhh";
-    let _access_token = "tok-123";
+    let _access_token = "ghp_1234567890abcdef";
     let _database_url = "postgres://user:pass@db.local/app";
     //
     let _ = regex::Regex::new(r"(a+)+$");
     let _ = regex::Regex::new(r".*token.*.*");
     let _ = regex::Regex::new(r"foo||bar");
     let _ = regex::RegexBuilder::new(format!("{}", pattern));
-    let _ = regex::Regex::new("[a-z]+").is_match(input);
+    let valid_name = regex::Regex::new("[a-z]+").is_match(input);
     let unused = 1;
     const MAX_RETRY: usize = 3;
+    let (used_left, unused_right) = (1, 2);
+    let _ = used_left;
 }
 
 fn shell_and_paths(user: &str) {
     std::process::Command::new("ls").arg("-la");
     std::process::Command::new("sh").arg("-c").arg(format!("echo {}", user));
+    let shell_home = std::env::var("HOME").unwrap();
+    std::process::Command::new("sh").arg("-c").arg(shell_home);
     let base = std::path::PathBuf::from("data");
     let _ = base.join("../secret");
     let _ = base.join(user_input);
@@ -94,10 +98,12 @@ fn full_pipeline_finds_all_requested_patterns() {
             "FE061", // empty doc comment
             "FE062", // empty comment
             "FE063", // bounded
+            "FE063", // valid_name
             "FE063", // password
             "FE063", // api_key
             "FE063", // secret
             "FE063", // unused
+            "FE063", // unused_right
             "FE064", // unused constant
             "FE065", // test without product-code reference
             "FE075", // assert-only test without product calls
@@ -108,7 +114,9 @@ fn full_pipeline_finds_all_requested_patterns() {
             "FE083", // unanchored validation regex
             "FE100", // command execution presence (ls)
             "FE100", // command execution presence (sh)
+            "FE100", // command execution presence (sh env)
             "FE101", // shell string injection
+            "FE101", // shell env var injection
             "FE120", // path traversal literal
             "FE121", // unsanitized path input
         ]

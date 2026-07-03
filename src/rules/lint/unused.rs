@@ -1,7 +1,5 @@
 use crate::finding::{Category, Finding, Severity};
-use crate::rules::{
-    count_identifier_uses, is_rule_ignored, FileContext, Rule,
-};
+use crate::rules::{count_identifier_uses, is_rule_ignored, FileContext, Rule};
 
 struct Declaration {
     name: String,
@@ -48,7 +46,7 @@ impl Rule for UnusedVariableRule {
     }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
-        let declarations = collect_declarations(ctx.content, parse_let_binding);
+        let declarations = collect_declarations(ctx.content, parse_let_bindings);
         declarations
             .iter()
             .filter_map(|decl| {
@@ -107,7 +105,7 @@ impl Rule for UnusedConstantRule {
     }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
-        let declarations = collect_declarations(ctx.content, parse_const_binding);
+        let declarations = collect_declarations(ctx.content, parse_const_bindings);
         declarations
             .iter()
             .filter_map(|decl| {
@@ -132,12 +130,12 @@ impl Rule for UnusedConstantRule {
 
 fn collect_declarations(
     content: &str,
-    parse: fn(&str) -> Option<(String, usize)>,
+    parse: fn(&str) -> Vec<(String, usize)>,
 ) -> Vec<Declaration> {
     let mut out = Vec::new();
     let mut byte_offset = 0;
     for (idx, line) in content.lines().enumerate() {
-        if let Some((name, col_start)) = parse(line) {
+        for (name, col_start) in parse(line) {
             let end = byte_offset + col_start + name.len();
             out.push(Declaration {
                 name,
@@ -153,10 +151,12 @@ fn collect_declarations(
     out
 }
 
-fn parse_let_binding(line: &str) -> Option<(String, usize)> {
+fn parse_let_bindings(line: &str) -> Vec<(String, usize)> {
     let trimmed = line.trim_start();
     let mut offset = line.len() - trimmed.len();
-    let mut rest = trimmed.strip_prefix("let ")?;
+    let Some(mut rest) = trimmed.strip_prefix("let ") else {
+        return Vec::new();
+    };
     offset += 4;
     let ws = rest.len() - rest.trim_start().len();
     rest = rest.trim_start();
@@ -169,8 +169,15 @@ fn parse_let_binding(line: &str) -> Option<(String, usize)> {
         rest = rest.trim_start();
         offset += ws;
     }
+    let binding_end = rest.find('=').unwrap_or(rest.len());
+    let pattern = rest[..binding_end].trim_end();
+
+    if pattern.contains(['(', '{', '[', ',']) {
+        return parse_pattern_bindings(pattern, line, offset);
+    }
+
     let mut name = String::new();
-    for ch in rest.chars() {
+    for ch in pattern.chars() {
         if ch.is_alphanumeric() || ch == '_' {
             name.push(ch);
         } else {
@@ -178,14 +185,60 @@ fn parse_let_binding(line: &str) -> Option<(String, usize)> {
         }
     }
     if name.is_empty() || name.starts_with('_') {
-        return None;
+        Vec::new()
+    } else {
+        vec![(name, offset)]
     }
-    let tail = rest[name.len()..].trim_start();
-    match tail.chars().next() {
-        Some(':' | '=' | ';') => Some((name, offset)),
-        Some('(' | '{' | '[' | ',') | None => None,
-        _ => None,
+}
+
+fn parse_pattern_bindings(pattern: &str, line: &str, base_offset: usize) -> Vec<(String, usize)> {
+    let bytes = pattern.as_bytes();
+    let mut out = Vec::new();
+    let mut idx = 0usize;
+
+    while idx < bytes.len() {
+        let ch = bytes[idx] as char;
+        if !(ch == '_' || ch.is_ascii_alphabetic()) {
+            idx += 1;
+            continue;
+        }
+
+        let start = idx;
+        idx += 1;
+        while idx < bytes.len() {
+            let next = bytes[idx] as char;
+            if next == '_' || next.is_ascii_alphanumeric() {
+                idx += 1;
+            } else {
+                break;
+            }
+        }
+
+        let name = &pattern[start..idx];
+        if name == "mut" || name == "ref" || name == "pub" || name.starts_with('_') {
+            continue;
+        }
+
+        let prev = pattern[..start].chars().rev().find(|c| !c.is_whitespace());
+        let next = pattern[idx..].chars().find(|c| !c.is_whitespace());
+
+        if matches!(next, Some('(')) && name.chars().next().is_some_and(|c| c.is_ascii_uppercase()) {
+            continue;
+        }
+        if matches!(next, Some(':')) {
+            continue;
+        }
+        if prev.is_some_and(|c| c.is_ascii_alphanumeric() || c == '_') {
+            continue;
+        }
+
+        let column = line.find(name).unwrap_or(start + base_offset) + 1;
+        if !out.iter().any(|(existing, _)| existing == name) {
+            out.push((name.to_string(), column - 1));
+        }
     }
+
+    out
 }
 
 fn parse_const_binding(line: &str) -> Option<(String, usize)> {
@@ -220,25 +273,59 @@ fn parse_const_binding(line: &str) -> Option<(String, usize)> {
     }
 }
 
+fn parse_const_bindings(line: &str) -> Vec<(String, usize)> {
+    parse_const_binding(line).into_iter().collect()
+}
+
 fn has_usage_after_declaration(
     content: &str,
     decl: &Declaration,
     all_decls: &[Declaration],
 ) -> bool {
     let occurrences = count_identifier_uses(content, &decl.name);
-    let next_shadow_start = all_decls
+    let next_shadow_end = all_decls
         .iter()
         .filter(|d| d.name == decl.name && d.start > decl.start)
-        .map(|d| d.start)
+        .map(|d| d.start + d.snippet.len())
         .min()
         .unwrap_or(content.len());
 
     occurrences.into_iter().any(|pos| {
-        if pos <= decl.end || pos >= next_shadow_start {
+        if pos <= decl.end || pos >= next_shadow_end {
             return false;
         }
         !all_decls
             .iter()
             .any(|d| d.name == decl.name && pos >= d.start && pos < d.end)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    fn scan_all(content: &str) -> Vec<Finding> {
+        let ctx = FileContext::new(Path::new("test.rs"), content);
+        vec![Box::new(UnusedVariableRule) as Box<dyn Rule>, Box::new(UnusedConstantRule)]
+            .iter()
+            .flat_map(|rule| rule.scan(&ctx))
+            .collect()
+    }
+
+    #[test]
+    fn detects_unused_destructured_binding() {
+        let findings = scan_all("let (left, right) = (1, 2);\nprintln!(\"{}\", left);\n");
+        let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
+        assert_eq!(ids, ["FE063"]);
+        assert!(findings[0].message.contains("right"));
+    }
+
+    #[test]
+    fn ignores_used_shadow_chain() {
+        let findings = scan_all(
+            "let value = 1;\nlet value = value + 1;\nlet value = value + 1;\nprintln!(\"{}\", value);\n",
+        );
+        assert!(findings.is_empty());
+    }
 }

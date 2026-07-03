@@ -10,6 +10,10 @@ Only `.rs` files are scanned by default, plus any extra files listed in
 On Windows, when run from a downloaded release binary, Fe203 attempts a
 one-time user `PATH` registration for its executable directory.
 
+When it updates `PATH`, Fe203 prefers its own executable directory at the front
+of the user path so an older `fe203.exe` earlier in `PATH` is less likely to
+shadow the current install.
+
 Set `FE203_NO_AUTO_PATH=1` to disable this behavior.
 
 ## `--config <FILE>`
@@ -144,14 +148,15 @@ Runs Fe203 in maximum validation mode before scanning:
 Runs the CLI repeatedly against a target folder and reports timing stats.
 
 - `N` is optional and defaults to `5`
-- benchmark mode requires a target path argument
+- benchmark mode defaults to `benchmarks/workload` when no target path is supplied
 - each iteration runs one full CLI scan of the target folder
 - benchmark child runs suppress normal scan output and only timing stats are printed
+- no warm-up run is injected; every reported iteration is measured work
 
 Examples:
 
 ```sh
-fe203 --benchmark benchmarks/workload
+fe203 --benchmark
 fe203 --benchmark 10 benchmarks/workload
 ```
 

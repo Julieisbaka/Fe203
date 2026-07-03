@@ -15,6 +15,7 @@ const SHELL_PROGRAMS: &[&str] = &[
 ];
 const SHELL_FLAGS: &[&str] = &["\"-c\"", "\"/c\"", "\"/C\"", "\"-Command\""];
 const DYNAMIC_MARKERS: &[&str] = &["format!(", "concat!(", ".to_string()", "push_str(", " + "];
+const ENV_VAR_MARKERS: &[&str] = &["std::env::var(", "env::var(", "std::env::args(", "env::args("];
 
 /// Detects presence of `Command::new(` / `std::process::Command::new(`.
 pub struct CommandExecutionRule;
@@ -111,6 +112,7 @@ impl Rule for ShellStringInjectionRule {
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
+        let env_bound_vars = env_bound_variable_names(ctx.content);
         for (line_no, line) in ctx.lines() {
             if is_rule_ignored(ctx, line_no, self.id(), self.name(), self.category()) {
                 continue;
@@ -118,7 +120,9 @@ impl Rule for ShellStringInjectionRule {
             let has_shell = SHELL_PROGRAMS.iter().any(|p| line.contains(p));
             let has_flag = SHELL_FLAGS.iter().any(|f| line.contains(f));
             let has_dynamic = DYNAMIC_MARKERS.iter().any(|m| line.contains(m));
-            if has_shell && has_flag && has_dynamic {
+            let has_env_input = ENV_VAR_MARKERS.iter().any(|m| line.contains(m))
+                || env_bound_vars.iter().any(|name| line_contains_identifier(line, name));
+            if has_shell && has_flag && (has_dynamic || has_env_input) {
                 findings.push(self.finding(
                     ctx,
                     line_no,
@@ -138,6 +142,58 @@ pub fn rules() -> Vec<Box<dyn Rule>> {
         Box::new(CommandExecutionRule),
         Box::new(ShellStringInjectionRule),
     ]
+}
+
+fn env_bound_variable_names(content: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for line in content.lines() {
+        if !(line.contains("std::env::var(")
+            || line.contains("env::var(")
+            || line.contains("std::env::args(")
+            || line.contains("env::args("))
+        {
+            continue;
+        }
+
+        if let Some((name, _)) = parse_simple_let_name(line) {
+            if !out.iter().any(|existing| existing == &name) {
+                out.push(name);
+            }
+        }
+    }
+    out
+}
+
+fn parse_simple_let_name(line: &str) -> Option<(String, usize)> {
+    let trimmed = line.trim_start();
+    let mut offset = line.len() - trimmed.len();
+    let mut rest = trimmed.strip_prefix("let ")?;
+    offset += 4;
+    let ws = rest.len() - rest.trim_start().len();
+    rest = rest.trim_start();
+    offset += ws;
+    if let Some(after_mut) = rest.strip_prefix("mut ") {
+        rest = after_mut.trim_start();
+        offset += 4;
+    }
+
+    let mut name = String::new();
+    for ch in rest.chars() {
+        if ch.is_alphanumeric() || ch == '_' {
+            name.push(ch);
+        } else {
+            break;
+        }
+    }
+    if name.is_empty() {
+        None
+    } else {
+        Some((name, offset))
+    }
+}
+
+fn line_contains_identifier(line: &str, name: &str) -> bool {
+    !word_occurrences(line, name).is_empty()
 }
 
 #[cfg(test)]
@@ -163,6 +219,15 @@ mod tests {
             scan_all("Command::new(\"sh\").arg(\"-c\").arg(format!(\"echo {}\", user));\n");
         let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
         assert!(ids.contains(&"FE100"));
+        assert!(ids.contains(&"FE101"));
+    }
+
+    #[test]
+    fn detects_env_var_shell_string() {
+        let findings = scan_all(
+            "let home = std::env::var(\"HOME\").unwrap();\nCommand::new(\"sh\").arg(\"-c\").arg(home);\n",
+        );
+        let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
         assert!(ids.contains(&"FE101"));
     }
 

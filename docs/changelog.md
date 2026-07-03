@@ -4,6 +4,13 @@
 
 - Optimized scan fingerprint construction to write directly into a preallocated `String` with `push_str`, reducing temporary allocations in the cache-key path.
 - Integrated benchmark mode into the main CLI via `fe203 --benchmark [N] <TARGET>`.
+- Added benchmark help coverage in CLI tests so `--benchmark` stays visible in `--help` output.
+- Improved Windows PATH handling so Fe203 prioritizes the current executable directory instead of only appending it, reducing stale-binary shadowing after upgrades.
+- `fe203 --benchmark` now defaults to scanning `benchmarks/workload` when no target path is supplied.
+- Improved FE101 to catch shell command construction fed from environment-variable-derived input.
+- Refined FE083 validation regex detection using nearby validation context instead of flagging generic search-style matches.
+- Strengthened secret heuristics with provider-specific token prefixes and stricter credential URL checks.
+- Improved FE063 unused-variable detection for destructuring patterns and common shadow chains.
 
 ## `0.1.2`
 

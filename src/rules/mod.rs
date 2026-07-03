@@ -13,8 +13,8 @@ pub mod secrets;
 pub mod shell;
 pub mod unsafe_usage;
 
-use std::path::Path;
 use std::collections::HashSet;
+use std::path::Path;
 
 use crate::finding::{Category, Finding, Severity};
 
@@ -352,10 +352,7 @@ pub(crate) fn contains_ignore_case(haystack: &str, needle: &str) -> bool {
     false
 }
 
-pub(crate) fn count_identifier_uses(
-    content: &str,
-    name: &str,
-) -> Vec<usize> {
+pub(crate) fn count_identifier_uses(content: &str, name: &str) -> Vec<usize> {
     let bytes = content.as_bytes();
     let needle = name.as_bytes();
     let mut index = 0;

@@ -5,6 +5,15 @@
 use crate::finding::{Category, Finding, Severity};
 use crate::rules::{contains_ignore_case, is_rule_ignored, FileContext, Rule};
 
+const PROVIDER_TOKEN_PREFIXES: &[&str] = &[
+    "ghp_", "github_pat_", "sk_live_", "sk_test_", "xoxb-", "xoxp-", "AKIA", "ya29.",
+    "glpat-",
+];
+const CREDENTIAL_URL_SCHEMES: &[&str] = &[
+    "postgres://", "postgresql://", "mysql://", "mongodb://", "redis://", "amqp://",
+    "http://", "https://",
+];
+
 /// Detects `<identifier containing keyword> = "non-empty literal"`.
 pub struct SecretAssignmentRule {
     id: &'static str,
@@ -69,6 +78,12 @@ fn looks_like_credential_url(right: &str) -> bool {
     let Some(value) = assigned_string_literal(right) else {
         return false;
     };
+    if !CREDENTIAL_URL_SCHEMES
+        .iter()
+        .any(|scheme| value.to_ascii_lowercase().starts_with(scheme))
+    {
+        return false;
+    }
     let Some(scheme_sep) = value.find("://") else {
         return false;
     };
@@ -84,7 +99,19 @@ fn looks_like_credential_url(right: &str) -> bool {
     let Some(colon) = userinfo.find(':') else {
         return false;
     };
-    colon > 0 && colon + 1 < userinfo.len()
+    let password = &userinfo[colon + 1..];
+    colon > 0
+        && !password.is_empty()
+        && !matches!(password.to_ascii_lowercase().as_str(), "password" | "example")
+}
+
+fn looks_like_provider_token(right: &str) -> bool {
+    let Some(value) = assigned_string_literal(right) else {
+        return false;
+    };
+    PROVIDER_TOKEN_PREFIXES
+        .iter()
+        .any(|prefix| value.starts_with(prefix))
 }
 
 pub struct CredentialUrlAssignmentRule;
@@ -196,6 +223,11 @@ impl Rule for SecretAssignmentRule {
                 .iter()
                 .find(|kw| contains_ignore_case(left, kw));
             if let Some(keyword) = matched {
+                if self.id == "FE043" && !looks_like_provider_token(right) && !contains_ignore_case(left, "token") {
+                    // Keep token findings reasonably high-signal unless the identifier
+                    // explicitly says token or the literal matches a known provider prefix.
+                    continue;
+                }
                 findings.push(self.finding(
                     ctx,
                     line_no,
@@ -254,9 +286,9 @@ mod tests {
     fn detects_each_secret_kind() {
         let findings = scan_all(concat!(
             "let password = \"hunter2\";\n",
-            "const API_KEY: &str = \"sk-12345\";\n",
+            "const API_KEY: &str = \"sk_live_12345\";\n",
             "let client_secret = \"shhh\";\n",
-            "let access_token = \"tok-123\";\n",
+            "let access_token = \"ghp_1234567890abcdef\";\n",
             "let database_url = \"postgres://user:pass@db.local/app\";\n",
         ));
         let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
@@ -291,6 +323,7 @@ mod tests {
         let findings = scan_all(concat!(
             "let db = \"postgres://user:pass@db.local/app\";\n",
             "let no_pass = \"postgres://user@db.local/app\";\n",
+            "let placeholder = \"postgres://user:password@db.local/app\";\n",
         ));
         let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
         assert_eq!(ids, ["FE044"]);

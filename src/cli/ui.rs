@@ -152,4 +152,11 @@ mod tests {
             std::env::remove_var("COLUMNS");
         }
     }
+
+    #[test]
+    fn usage_text_includes_benchmark_option() {
+        let usage = usage_text();
+        assert!(usage.contains("--benchmark [N]"));
+        assert!(usage.contains("Run N benchmark scans against the target folder path"));
+    }
 }

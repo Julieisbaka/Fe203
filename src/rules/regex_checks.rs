@@ -241,7 +241,10 @@ impl Rule for UnanchoredValidationRegexRule {
                 continue;
             }
             for (column, pattern) in string_literals_in_line(line) {
-                if looks_like_regex(&pattern) && !is_anchored(&pattern) {
+                if looks_like_regex(&pattern)
+                    && !is_anchored(&pattern)
+                    && looks_like_validation_context(line)
+                {
                     findings.push(self.finding(
                         ctx,
                         line_no,
@@ -402,6 +405,25 @@ fn is_anchored(pattern: &str) -> bool {
     pattern.starts_with('^') && pattern.ends_with('$')
 }
 
+fn looks_like_validation_context(line: &str) -> bool {
+    let lower = line.to_ascii_lowercase();
+
+    if lower.contains("regex::new(") || lower.contains("regexbuilder::new(") {
+        return true;
+    }
+
+    let validation_markers = [
+        "valid", "validate", "invalid", "check", "allowed", "email", "username", "slug",
+        "password", "token", "input", "field", "match_ok",
+    ];
+    let search_markers = ["search", "find", "lookup", "grep", "scan for", "contains"];
+
+    let validation_hit = validation_markers.iter().any(|marker| lower.contains(marker));
+    let search_hit = search_markers.iter().any(|marker| lower.contains(marker));
+
+    validation_hit || !search_hit
+}
+
 /// True if `pattern` contains at least one character that suggests it is
 /// actually a regex (as opposed to a plain identifier or short literal that
 /// merely happens to sit next to an unrelated `.find(`/`.captures(` call).
@@ -460,9 +482,15 @@ mod tests {
 
     #[test]
     fn detects_unanchored_capture() {
-        let findings = scan_all("let ok = re.captures(\"[a-z]+\");\n");
+        let findings = scan_all("let valid_name = re.captures(\"[a-z]+\");\n");
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule_id, "FE083");
+    }
+
+    #[test]
+    fn ignores_search_context_is_match() {
+        let findings = scan_all("let search_result = re.is_match(\"[a-z]+\");\n");
+        assert!(findings.is_empty());
     }
 
     #[test]

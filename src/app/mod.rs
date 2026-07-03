@@ -10,6 +10,8 @@ mod cargo;
 mod path_setup;
 mod scan;
 
+const DEFAULT_BENCHMARK_TARGET: &str = "benchmarks/workload";
+
 /// Runs the CLI with the given arguments. Returns the process exit code:
 /// `0` = clean, `1` = findings reported, `2` = usage/config error.
 pub fn run(args: &[String]) -> i32 {
@@ -21,8 +23,6 @@ pub fn run(args: &[String]) -> i32 {
             return 2;
         }
     };
-
-    path_setup::ensure_exe_dir_in_path();
 
     if should_show_intro(args) {
         println!("{}", cli::intro_text());
@@ -84,11 +84,9 @@ pub fn run(args: &[String]) -> i32 {
         return 0;
     }
 
+    path_setup::ensure_exe_dir_in_path();
+
     if let Some(iterations) = opts.benchmark_iterations {
-        if opts.paths.is_empty() {
-            eprintln!("error: --benchmark requires a target folder path");
-            return 2;
-        }
         return run_benchmark_mode(args, iterations);
     }
 
@@ -208,12 +206,15 @@ pub fn run(args: &[String]) -> i32 {
 }
 
 fn run_benchmark_mode(args: &[String], iterations: usize) -> i32 {
-    let benchmark_args = strip_benchmark_args(args);
+    let mut benchmark_args = strip_benchmark_args(args);
+    if !benchmark_args.iter().any(|arg| !arg.starts_with('-')) {
+        benchmark_args.push(DEFAULT_BENCHMARK_TARGET.to_string());
+    }
     let target = benchmark_args
         .iter()
         .find(|arg| !arg.starts_with('-'))
         .cloned()
-        .unwrap_or_else(|| "<unknown>".to_string());
+        .unwrap_or_else(|| DEFAULT_BENCHMARK_TARGET.to_string());
 
     let exe = match std::env::current_exe() {
         Ok(path) => path,
@@ -380,5 +381,15 @@ mod tests {
 
         let args_equals = vec!["--benchmark=3".to_string(), "src".to_string()];
         assert_eq!(strip_benchmark_args(&args_equals), vec!["src"]);
+    }
+
+    #[test]
+    fn benchmark_mode_defaults_target_folder() {
+        let args = vec!["--benchmark".to_string()];
+        let mut stripped = strip_benchmark_args(&args);
+        if !stripped.iter().any(|arg| !arg.starts_with('-')) {
+            stripped.push(DEFAULT_BENCHMARK_TARGET.to_string());
+        }
+        assert_eq!(stripped, vec![DEFAULT_BENCHMARK_TARGET.to_string()]);
     }
 }
