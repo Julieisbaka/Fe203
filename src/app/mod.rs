@@ -239,7 +239,10 @@ fn run_benchmark_mode(args: &[String], iterations: usize) -> i32 {
         {
             Ok(status) => status,
             Err(err) => {
-                eprintln!("error: benchmark iteration {} failed to start: {err}", idx + 1);
+                eprintln!(
+                    "error: benchmark iteration {} failed to start: {err}",
+                    idx + 1
+                );
                 return 2;
             }
         };

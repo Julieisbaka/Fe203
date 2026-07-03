@@ -212,22 +212,14 @@ pub(super) fn looks_like_validation_context_near(lines: &[(usize, &str)], idx: u
     let context = context_window(lines, idx, 2, 2).to_ascii_lowercase();
 
     let validation_markers = [
-        "valid",
-        "validate",
-        "invalid",
-        "check",
-        "allowed",
-        "email",
-        "username",
-        "slug",
-        "password",
-        "token",
-        "field",
-        "match_ok",
+        "valid", "validate", "invalid", "check", "allowed", "email", "username", "slug",
+        "password", "token", "field", "match_ok",
     ];
     let search_markers = ["search", "find", "lookup", "grep", "scan for", "contains"];
 
-    let validation_hit = validation_markers.iter().any(|marker| context.contains(marker));
+    let validation_hit = validation_markers
+        .iter()
+        .any(|marker| context.contains(marker));
     let search_hit = search_markers.iter().any(|marker| context.contains(marker));
 
     if search_hit && !validation_hit {
@@ -282,7 +274,10 @@ pub(super) fn nearby_regex_patterns(
     let end = (idx + 1).min(lines.len().saturating_sub(1));
     regex_call_sites(&lines[start..=end])
         .into_iter()
-        .filter_map(|call| call.pattern.map(|pattern| (call.line_no, call.column, pattern)))
+        .filter_map(|call| {
+            call.pattern
+                .map(|pattern| (call.line_no, call.column, pattern))
+        })
         .collect()
 }
 
@@ -345,7 +340,11 @@ fn parenthesized_argument(input: &str) -> Option<(String, usize)> {
     None
 }
 
-fn statement_offset_to_line_column(lines: &[(usize, &str)], idx: usize, offset: usize) -> (usize, usize) {
+fn statement_offset_to_line_column(
+    lines: &[(usize, &str)],
+    idx: usize,
+    offset: usize,
+) -> (usize, usize) {
     let mut remaining = offset;
     for (line_no, line) in lines.iter().skip(idx) {
         if remaining <= line.len() {
@@ -353,7 +352,10 @@ fn statement_offset_to_line_column(lines: &[(usize, &str)], idx: usize, offset: 
         }
         remaining = remaining.saturating_sub(line.len() + 1);
     }
-    lines.get(idx).map(|(line_no, _)| (*line_no, 1)).unwrap_or((1, 1))
+    lines
+        .get(idx)
+        .map(|(line_no, _)| (*line_no, 1))
+        .unwrap_or((1, 1))
 }
 
 fn comma_separated_parts(input: &str) -> Vec<&str> {

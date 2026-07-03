@@ -24,9 +24,9 @@ pub fn rules() -> Vec<Box<dyn crate::rules::Rule>> {
 
 #[cfg(test)]
 mod tests {
+    use super::helpers::scan_all_for_tests;
     use super::*;
     use crate::finding::Finding;
-    use super::helpers::scan_all_for_tests;
 
     fn scan_all(content: &str) -> Vec<Finding> {
         scan_all_for_tests(content, &rules())

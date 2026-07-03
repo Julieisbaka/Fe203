@@ -58,11 +58,19 @@ Run an opt-in syntax/type check before scanning:
 fe203 --check-syntax
 ```
 
+`--check-syntax` runs `cargo check` on the target project. Treat it as unsafe
+for untrusted repositories because Cargo can execute build scripts, proc macros,
+and other project-controlled code during the check.
+
 Run maximum validation mode (checks + tests + all rules):
 
 ```sh
 fe203 --max
 ```
+
+`--max` is also unsafe for untrusted repositories. It runs both `cargo check`
+and `cargo test`, so it can execute test code in addition to build-time Cargo
+hooks.
 
 Benchmark repeated scans against a folder:
 

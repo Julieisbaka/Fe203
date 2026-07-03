@@ -13,12 +13,16 @@ General code-quality lint rules.
 | FE066 | info | stale `fe203-ignore`/`fe203-ignore-file` rule IDs that do not match any finding in the file |
 | FE075 | warning | test function with assert-only logic and no product-code call/reference |
 | FE076 | warning | `unwrap`/`expect`-style calls outside test code |
-| FE077 | warning | error-erasing patterns like `map_err(|_| ...)` |
+| FE077 | warning | error-erasing patterns like `map_err(\|_\| ...)` |
 
 ## Notes
 
 - **FE060** is detected across multi-line method chains, not just when the
   chain appears on a single line.
+- **FE063** now follows multi-line `let` statements, nested destructuring
+  patterns, and same-name shadow chains across inner blocks. It is still
+  heuristic text analysis, so macro-generated bindings and more complex
+  control-flow-sensitive cases can still be missed.
 
 See [overview.md](overview.md) for the rule model and [../suppressions.md](../suppressions.md)
 for how to suppress an individual finding.

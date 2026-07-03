@@ -2,12 +2,12 @@
 
 Rules that flag risky or inefficient regex usage.
 
-| ID | Severity | Detects |
-|----|----------|---------|
-| FE080 | warning | nested quantifiers like `(a+)+` |
-| FE081 | info | suspicious regex wildcards / empty alternation |
-| FE082 | high | dynamic regex construction from runtime input or non-literal pattern expressions |
-| FE083 | info | unanchored validation regex used with `is_match(`/`captures(` |
+| ID    | Severity | Detects                                                                          |
+|-------|----------|----------------------------------------------------------------------------------|
+| FE080 | warning  | nested quantifiers like `(a+)+`                                                  |
+| FE081 | info     | suspicious regex wildcards / empty alternation                                   |
+| FE082 | high     | dynamic regex construction from runtime input or non-literal pattern expressions |
+| FE083 | info     | unanchored validation regex used with `is_match(`/`captures(`                    |
 
 ## Notes
 

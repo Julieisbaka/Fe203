@@ -126,6 +126,10 @@ Short alias: `-B`. Also supports `--init-baseline=FILE`.
 
 Runs an opt-in `cargo check --quiet` pass before scanning.
 
+This flag is not safe for untrusted repositories. `cargo check` can run build
+scripts, proc macros, and other Cargo-driven project code as part of dependency
+resolution and compilation.
+
 - Syntax checking is disabled by default.
 - Checks run only for scan targets that resolve to a directory containing
   `Cargo.toml` (or a `Cargo.toml` file target).
@@ -135,6 +139,10 @@ Runs an opt-in `cargo check --quiet` pass before scanning.
 ## `--max`
 
 Runs Fe203 in maximum validation mode before scanning:
+
+This flag is not safe for untrusted repositories. It runs Cargo commands against
+the target project and can execute build scripts, proc macros, tests, and other
+project-controlled code.
 
 - runs `cargo check --quiet` automatically
 - runs `cargo test --quiet` automatically

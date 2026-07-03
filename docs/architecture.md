@@ -7,12 +7,12 @@ heuristics rather than deep semantic analysis.
 
 ## Module Layout
 
-- `src/cli.rs` — parses arguments with the standard library.
+- `src/cli/` — parses arguments and renders help text with the standard library.
 - `src/config.rs` — parses a small TOML subset without external crates.
 - `src/finding.rs` — shared `Finding`, `Severity`, and `Category` types.
 - `src/rules/mod.rs` — the `Rule` trait, the `all_rules()` registry, rule
   index/explain rendering, and suppression helpers.
-- `src/scanner.rs` — file discovery, `[paths]` glob matching, and the scan
+- `src/scanner/` — file discovery, `[paths]` glob matching, caching, and the scan
   pipeline that runs enabled rules over discovered files.
 - `src/reporting.rs` — human-readable and JSON rendering of findings.
 
@@ -21,8 +21,8 @@ heuristics rather than deep semantic analysis.
 - `src/rules/debug_code.rs` — `debug` category rules.
 - `src/rules/unsafe_usage.rs` — `unsafe` category rules.
 - `src/rules/secrets.rs` — `secrets` category rules.
-- `src/rules/lint.rs` — `lint` category rules.
-- `src/rules/regex_checks.rs` — `regex` category rules.
+- `src/rules/lint/` — `lint` category rules.
+- `src/rules/regex_checks/` — `regex` category rules.
 
 See [rules/overview.md](rules/overview.md) for how new rule modules (such as
 the `shell` and `path` families) plug into this same structure.
@@ -31,7 +31,8 @@ the `shell` and `path` families) plug into this same structure.
 
 - Regex heuristics are heuristic, not semantic regex analysis.
 - Text-based scanning can flag intentional matches in literals, tests, or docs.
-- Unused-variable detection is intentionally shallow and may miss more complex
-  destructuring or block-scoped cases.
+- Unused-variable detection now follows multi-line bindings and common
+  block-scoped shadow chains, but it is still heuristic and may miss more
+  complex macro-generated or control-flow-sensitive cases.
 - Suppression is line/file-based, not AST-aware (see [suppressions.md](suppressions.md)).
 - `Cargo.toml` scanning is opt-in through `[paths].include`.

@@ -78,8 +78,9 @@ pub fn parse(args: &[String]) -> Result<CliOptions, String> {
                     .unwrap_or_default()
                     .trim();
                 if value.is_empty() {
-                    return Err("--benchmark requires a positive iteration count when using ="
-                        .to_string());
+                    return Err(
+                        "--benchmark requires a positive iteration count when using =".to_string(),
+                    );
                 }
                 let parsed = value
                     .parse::<usize>()

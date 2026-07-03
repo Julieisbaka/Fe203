@@ -7,7 +7,15 @@ struct Declaration {
     column: usize,
     start: usize,
     end: usize,
+    shadow_start: usize,
+    scope_end: usize,
     snippet: String,
+}
+
+struct Statement {
+    start: usize,
+    end: usize,
+    text: String,
 }
 
 /// Detects local variables that appear to be declared but never used.
@@ -132,28 +140,32 @@ fn collect_declarations(
     content: &str,
     parse: fn(&str) -> Vec<(String, usize)>,
 ) -> Vec<Declaration> {
+    let line_starts = build_line_starts(content);
     let mut out = Vec::new();
-    let mut byte_offset = 0;
-    for (idx, line) in content.lines().enumerate() {
-        for (name, col_start) in parse(line) {
-            let end = byte_offset + col_start + name.len();
+    for statement in collect_binding_statements(content) {
+        let scope_end = lexical_scope_end(content, statement.start);
+        for (name, rel_start) in parse(&statement.text) {
+            let start = statement.start + rel_start;
+            let end = start + name.len();
+            let (line_no, column) = locate_line_and_column(&line_starts, start);
             out.push(Declaration {
                 name,
-                line_no: idx + 1,
-                column: col_start + 1,
-                start: byte_offset + col_start,
+                line_no,
+                column,
+                start,
                 end,
-                snippet: line.to_string(),
+                shadow_start: statement.end,
+                scope_end,
+                snippet: line_text(content, &line_starts, line_no).to_string(),
             });
         }
-        byte_offset += line.len() + 1;
     }
     out
 }
 
-fn parse_let_bindings(line: &str) -> Vec<(String, usize)> {
-    let trimmed = line.trim_start();
-    let mut offset = line.len() - trimmed.len();
+fn parse_let_bindings(statement: &str) -> Vec<(String, usize)> {
+    let trimmed = statement.trim_start();
+    let mut offset = statement.len() - trimmed.len();
     let Some(mut rest) = trimmed.strip_prefix("let ") else {
         return Vec::new();
     };
@@ -173,7 +185,7 @@ fn parse_let_bindings(line: &str) -> Vec<(String, usize)> {
     let pattern = rest[..binding_end].trim_end();
 
     if pattern.contains(['(', '{', '[', ',']) {
-        return parse_pattern_bindings(pattern, line, offset);
+        return parse_pattern_bindings(pattern, offset);
     }
 
     let mut name = String::new();
@@ -191,7 +203,7 @@ fn parse_let_bindings(line: &str) -> Vec<(String, usize)> {
     }
 }
 
-fn parse_pattern_bindings(pattern: &str, line: &str, base_offset: usize) -> Vec<(String, usize)> {
+fn parse_pattern_bindings(pattern: &str, base_offset: usize) -> Vec<(String, usize)> {
     let bytes = pattern.as_bytes();
     let mut out = Vec::new();
     let mut idx = 0usize;
@@ -222,7 +234,9 @@ fn parse_pattern_bindings(pattern: &str, line: &str, base_offset: usize) -> Vec<
         let prev = pattern[..start].chars().rev().find(|c| !c.is_whitespace());
         let next = pattern[idx..].chars().find(|c| !c.is_whitespace());
 
-        if matches!(next, Some('(')) && name.chars().next().is_some_and(|c| c.is_ascii_uppercase()) {
+        if matches!(next, Some('(' | '{' | '['))
+            && name.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+        {
             continue;
         }
         if matches!(next, Some(':')) {
@@ -232,18 +246,17 @@ fn parse_pattern_bindings(pattern: &str, line: &str, base_offset: usize) -> Vec<
             continue;
         }
 
-        let column = line.find(name).unwrap_or(start + base_offset) + 1;
         if !out.iter().any(|(existing, _)| existing == name) {
-            out.push((name.to_string(), column - 1));
+            out.push((name.to_string(), base_offset + start));
         }
     }
 
     out
 }
 
-fn parse_const_binding(line: &str) -> Option<(String, usize)> {
-    let trimmed = line.trim_start();
-    let mut offset = line.len() - trimmed.len();
+fn parse_const_binding(statement: &str) -> Option<(String, usize)> {
+    let trimmed = statement.trim_start();
+    let mut offset = statement.len() - trimmed.len();
     let rest = if let Some(after_pub) = trimmed.strip_prefix("pub ") {
         offset += 4;
         after_pub.trim_start()
@@ -283,21 +296,291 @@ fn has_usage_after_declaration(
     all_decls: &[Declaration],
 ) -> bool {
     let occurrences = count_identifier_uses(content, &decl.name);
-    let next_shadow_end = all_decls
-        .iter()
-        .filter(|d| d.name == decl.name && d.start > decl.start)
-        .map(|d| d.start + d.snippet.len())
-        .min()
-        .unwrap_or(content.len());
 
     occurrences.into_iter().any(|pos| {
-        if pos <= decl.end || pos >= next_shadow_end {
+        if pos <= decl.end || pos >= decl.scope_end {
+            return false;
+        }
+        if all_decls.iter().any(|other| {
+            other.name == decl.name
+                && other.start > decl.start
+                && pos >= other.shadow_start
+                && pos < other.scope_end
+        }) {
             return false;
         }
         !all_decls
             .iter()
             .any(|d| d.name == decl.name && pos >= d.start && pos < d.end)
     })
+}
+
+fn collect_binding_statements(content: &str) -> Vec<Statement> {
+    let line_starts = build_line_starts(content);
+    let mut out = Vec::new();
+
+    for start in line_starts {
+        let line = content[start..]
+            .split_once('\n')
+            .map(|(line, _)| line)
+            .unwrap_or(&content[start..]);
+        let trimmed = line.trim_start();
+        if !trimmed.starts_with("let ")
+            && !trimmed.starts_with("let mut ")
+            && !trimmed.starts_with("const ")
+            && !trimmed.starts_with("pub const ")
+        {
+            continue;
+        }
+        let offset = line.len() - trimmed.len();
+        let statement_start = start + offset;
+        let statement_end = find_statement_end(content, statement_start);
+        out.push(Statement {
+            start: statement_start,
+            end: statement_end,
+            text: content[statement_start..statement_end].to_string(),
+        });
+    }
+
+    out
+}
+
+fn build_line_starts(content: &str) -> Vec<usize> {
+    let mut starts = vec![0];
+    for (idx, byte) in content.as_bytes().iter().enumerate() {
+        if *byte == b'\n' && idx + 1 < content.len() {
+            starts.push(idx + 1);
+        }
+    }
+    starts
+}
+
+fn locate_line_and_column(line_starts: &[usize], offset: usize) -> (usize, usize) {
+    let line_idx = match line_starts.binary_search(&offset) {
+        Ok(idx) => idx,
+        Err(idx) => idx.saturating_sub(1),
+    };
+    let line_start = line_starts[line_idx];
+    (line_idx + 1, offset - line_start + 1)
+}
+
+fn line_text<'a>(content: &'a str, line_starts: &[usize], line_no: usize) -> &'a str {
+    let idx = line_no.saturating_sub(1);
+    let start = line_starts[idx];
+    let end = line_starts
+        .get(idx + 1)
+        .copied()
+        .unwrap_or(content.len())
+        .saturating_sub(1);
+    &content[start..end]
+}
+
+fn lexical_scope_end(content: &str, start: usize) -> usize {
+    let initial_depth = brace_depth_before(content, start);
+    let mut depth = initial_depth;
+    let bytes = content.as_bytes();
+    let mut idx = start;
+
+    while idx < bytes.len() {
+        if bytes[idx] == b'/' && idx + 1 < bytes.len() && bytes[idx + 1] == b'/' {
+            idx += 2;
+            while idx < bytes.len() && bytes[idx] != b'\n' {
+                idx += 1;
+            }
+            continue;
+        }
+        if bytes[idx] == b'/' && idx + 1 < bytes.len() && bytes[idx + 1] == b'*' {
+            idx = skip_block_comment(bytes, idx + 2);
+            continue;
+        }
+        if bytes[idx] == b'"' {
+            idx = skip_string_literal(bytes, idx + 1, b'"');
+            continue;
+        }
+        if bytes[idx] == b'\'' {
+            idx = skip_char_literal(bytes, idx + 1);
+            continue;
+        }
+        if bytes[idx] == b'r' {
+            if let Some(end) = skip_raw_string_literal(bytes, idx) {
+                idx = end;
+                continue;
+            }
+        }
+
+        match bytes[idx] {
+            b'{' => depth += 1,
+            b'}' => {
+                if depth == initial_depth {
+                    return idx;
+                }
+                depth -= 1;
+            }
+            _ => {}
+        }
+        idx += 1;
+    }
+
+    content.len()
+}
+
+fn brace_depth_before(content: &str, end: usize) -> usize {
+    let bytes = content.as_bytes();
+    let mut idx = 0usize;
+    let mut depth = 0usize;
+
+    while idx < end && idx < bytes.len() {
+        if bytes[idx] == b'/' && idx + 1 < end && bytes[idx + 1] == b'/' {
+            idx += 2;
+            while idx < end && bytes[idx] != b'\n' {
+                idx += 1;
+            }
+            continue;
+        }
+        if bytes[idx] == b'/' && idx + 1 < end && bytes[idx + 1] == b'*' {
+            idx = skip_block_comment(bytes, idx + 2).min(end);
+            continue;
+        }
+        if bytes[idx] == b'"' {
+            idx = skip_string_literal(bytes, idx + 1, b'"').min(end);
+            continue;
+        }
+        if bytes[idx] == b'\'' {
+            idx = skip_char_literal(bytes, idx + 1).min(end);
+            continue;
+        }
+        if bytes[idx] == b'r' {
+            if let Some(raw_end) = skip_raw_string_literal(bytes, idx) {
+                idx = raw_end.min(end);
+                continue;
+            }
+        }
+
+        match bytes[idx] {
+            b'{' => depth += 1,
+            b'}' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+        idx += 1;
+    }
+
+    depth
+}
+
+fn find_statement_end(content: &str, start: usize) -> usize {
+    let bytes = content.as_bytes();
+    let mut idx = start;
+    let mut paren_depth = 0usize;
+    let mut bracket_depth = 0usize;
+    let mut brace_depth = 0usize;
+
+    while idx < bytes.len() {
+        if bytes[idx] == b'/' && idx + 1 < bytes.len() && bytes[idx + 1] == b'/' {
+            idx += 2;
+            while idx < bytes.len() && bytes[idx] != b'\n' {
+                idx += 1;
+            }
+            continue;
+        }
+        if bytes[idx] == b'/' && idx + 1 < bytes.len() && bytes[idx + 1] == b'*' {
+            idx = skip_block_comment(bytes, idx + 2);
+            continue;
+        }
+        if bytes[idx] == b'"' {
+            idx = skip_string_literal(bytes, idx + 1, b'"');
+            continue;
+        }
+        if bytes[idx] == b'\'' {
+            idx = skip_char_literal(bytes, idx + 1);
+            continue;
+        }
+        if bytes[idx] == b'r' {
+            if let Some(raw_end) = skip_raw_string_literal(bytes, idx) {
+                idx = raw_end;
+                continue;
+            }
+        }
+
+        match bytes[idx] {
+            b'(' => paren_depth += 1,
+            b')' => paren_depth = paren_depth.saturating_sub(1),
+            b'[' => bracket_depth += 1,
+            b']' => bracket_depth = bracket_depth.saturating_sub(1),
+            b'{' => brace_depth += 1,
+            b'}' => brace_depth = brace_depth.saturating_sub(1),
+            b';' if paren_depth == 0 && bracket_depth == 0 && brace_depth == 0 => {
+                return idx;
+            }
+            _ => {}
+        }
+        idx += 1;
+    }
+
+    content.len()
+}
+
+fn skip_string_literal(bytes: &[u8], mut index: usize, terminator: u8) -> usize {
+    while index < bytes.len() {
+        if bytes[index] == b'\\' {
+            index = (index + 2).min(bytes.len());
+        } else if bytes[index] == terminator {
+            return index + 1;
+        } else {
+            index += 1;
+        }
+    }
+    bytes.len()
+}
+
+fn skip_char_literal(bytes: &[u8], index: usize) -> usize {
+    skip_string_literal(bytes, index, b'\'')
+}
+
+fn skip_raw_string_literal(bytes: &[u8], index: usize) -> Option<usize> {
+    if bytes.get(index) != Some(&b'r') {
+        return None;
+    }
+    let mut hashes = 0usize;
+    let mut cursor = index + 1;
+    while bytes.get(cursor) == Some(&b'#') {
+        hashes += 1;
+        cursor += 1;
+    }
+    if bytes.get(cursor) != Some(&b'"') {
+        return None;
+    }
+    cursor += 1;
+    while cursor < bytes.len() {
+        if bytes[cursor] == b'"' {
+            let mut end = cursor + 1;
+            let mut seen = 0usize;
+            while seen < hashes && bytes.get(end) == Some(&b'#') {
+                seen += 1;
+                end += 1;
+            }
+            if seen == hashes {
+                return Some(end);
+            }
+        }
+        cursor += 1;
+    }
+    Some(bytes.len())
+}
+
+fn skip_block_comment(bytes: &[u8], mut index: usize) -> usize {
+    let mut depth = 1usize;
+    while index < bytes.len() && depth > 0 {
+        if index + 1 < bytes.len() && bytes[index] == b'/' && bytes[index + 1] == b'*' {
+            depth += 1;
+            index += 2;
+        } else if index + 1 < bytes.len() && bytes[index] == b'*' && bytes[index + 1] == b'/' {
+            depth -= 1;
+            index += 2;
+        } else {
+            index += 1;
+        }
+    }
+    index
 }
 
 #[cfg(test)]
@@ -327,5 +610,31 @@ mod tests {
             "let value = 1;\nlet value = value + 1;\nlet value = value + 1;\nprintln!(\"{}\", value);\n",
         );
         assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn detects_unused_multiline_destructured_binding() {
+        let findings = scan_all(
+            "let (\n    left,\n    right,\n) = pair();\nprintln!(\"{}\", left);\n",
+        );
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("right"));
+    }
+
+    #[test]
+    fn keeps_outer_use_after_inner_shadow_block() {
+        let findings = scan_all(
+            "let value = 1;\n{\n    let value = 2;\n    println!(\"{}\", value);\n}\nprintln!(\"{}\", value);\n",
+        );
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn detects_unused_nested_struct_pattern_binding() {
+        let findings = scan_all(
+            "let Foo { left: Some(inner), right } = value;\nprintln!(\"{}\", right);\n",
+        );
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("inner"));
     }
 }

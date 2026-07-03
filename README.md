@@ -60,10 +60,14 @@ fe203 --json src/    # emit JSON for a specific path
 fe203 -j --pretty src/  # short flags are supported for common options
 fe203 --rules=FE001,FE080 --categories=debug,secrets src/
 fe203 --json --pretty src/  # emit pretty-printed JSON
-fe203 --check-syntax # opt-in cargo syntax/type check before scanning
-fe203 --max          # run cargo check + cargo test + all rules before scanning
+fe203 --check-syntax # runs cargo check; unsafe on untrusted repos
+fe203 --max          # runs cargo check + cargo test + all rules; unsafe on untrusted repos
 fe203 --list-rules   # print the built-in rule index
 ```
+
+`--check-syntax` and `--max` invoke Cargo on the target project. Do not use
+them on untrusted repositories unless you are willing to run that repository's
+build scripts, proc macros, tests, and related Cargo-driven code.
 
 ## Documentation
 

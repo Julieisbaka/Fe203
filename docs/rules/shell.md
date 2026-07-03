@@ -2,10 +2,10 @@
 
 Rules covering shell command construction risks.
 
-| ID | Severity | Name | Detects |
-|----|----------|------|---------|
-| FE100 | info | `command-execution` | presence of `Command::new(` / `std::process::Command::new(` |
-| FE101 | high | `shell-string-injection` | a shell interpreter invoked with a shell flag and a dynamically built or environment-fed command string |
+| ID    | Severity | Name                     | Detects                                                     |
+|-------|----------|--------------------------|-------------------------------------------------------------|
+| FE100 | info     | `command-execution`      | presence of `Command::new(` / `std::process::Command::new(` |
+| FE101 | high     | `shell-string-injection` | a shell interpreter invoked with a shell flag and a dynamically built or environment-fed command string |
 
 ## FE100 — `command-execution`
 

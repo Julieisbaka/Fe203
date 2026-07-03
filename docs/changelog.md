@@ -1,5 +1,10 @@
 # Fe203 Changelog
 
+## `0.1.6`
+
+- Clarified in CLI help and docs that `--check-syntax` and `--max` are unsafe on untrusted repositories because they invoke Cargo on the target project.
+- Deepened FE063 unused-variable detection to follow multi-line bindings, nested destructuring patterns, and common block-scoped shadow chains.
+
 ## `0.1.5`
 
 - Hardened CLI terminal detection so help, intro text, and human-readable findings fall back to safer plain layouts on redirected output and legacy terminal environments.

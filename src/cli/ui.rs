@@ -55,11 +55,11 @@ pub fn usage_text() -> String {
         ),
         (
             "--check-syntax",
-            "Run cargo check on matching Cargo targets before scanning",
+            "Run cargo check before scanning; unsafe for untrusted repos",
         ),
         (
             "--max",
-            "Run all rules and automatically run cargo check + cargo test",
+            "Run all rules plus cargo check/test; unsafe for untrusted repos",
         ),
         (
             "--benchmark [N]",
@@ -133,10 +133,8 @@ fn terminal_profile_from_env(stdout_terminal: bool, stderr_terminal: bool) -> Te
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or_else(|| if redirected_stdout { 80 } else { 100 });
 
-    let ascii_only = ascii_env
-        || dumb
-        || redirected_stdout
-        || (cfg!(windows) && !modern_windows_terminal);
+    let ascii_only =
+        ascii_env || dumb || redirected_stdout || (cfg!(windows) && !modern_windows_terminal);
     let narrow = cols < 90 || dumb || redirected_stdout || !stderr_terminal;
 
     TerminalProfile {

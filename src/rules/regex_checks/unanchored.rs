@@ -54,10 +54,7 @@ impl Rule for UnanchoredValidationRegexRule {
             }
             let validation_context = looks_like_validation_context_near(&lines, idx);
             for (column, pattern) in string_literals_in_line(line) {
-                if looks_like_regex(&pattern)
-                    && !is_anchored(&pattern)
-                    && validation_context
-                {
+                if looks_like_regex(&pattern) && !is_anchored(&pattern) && validation_context {
                     findings.push(self.finding(
                         ctx,
                         *line_no,

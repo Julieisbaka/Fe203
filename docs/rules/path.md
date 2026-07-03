@@ -2,11 +2,11 @@
 
 Rules covering path traversal and untrusted path-join risks.
 
-| ID | Severity | Name | Detects |
-|----|----------|------|---------|
-| FE120 | high | `path-traversal-literal` | a literal `..` path segment passed to `.join(`, `.push(`, or `PathBuf::from(` |
-| FE121 | warning | `unsanitized-path-input` | a `.join(`/`.push(` call whose argument textually looks like untrusted input |
-| FE122 | high | `archive-entry-path-traversal` | archive extraction code that joins destination paths with entry-derived names without clear validation |
+| ID    | Severity | Name                           | Detects                                                     |
+|-------|----------|--------------------------------|-------------------------------------------------------------|
+| FE120 | high     | `path-traversal-literal`       | a literal `..` path segment passed to `.join(`, `.push(`, or `PathBuf::from(` |
+| FE121 | warning  | `unsanitized-path-input`       | a `.join(`/`.push(` call whose argument textually looks like untrusted input  |
+| FE122 | high     | `archive-entry-path-traversal` | archive extraction code that joins destination paths with entry-derived names without clear validation |
 
 ## FE120 — `path-traversal-literal`
 
