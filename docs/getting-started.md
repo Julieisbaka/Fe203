@@ -42,6 +42,10 @@ fe203 .
 
 Running `fe203` with no path prints a quick-start intro screen.
 
+Human-readable findings always include `path:line:column`. On narrow or
+redirected terminals, Fe203 automatically switches to a stacked layout so long
+messages stay readable without horizontal wrapping.
+
 Scan specific paths:
 
 ```sh

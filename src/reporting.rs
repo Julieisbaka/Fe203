@@ -3,24 +3,46 @@
 
 use std::collections::HashSet;
 
+use crate::cli::{terminal_profile, TerminalProfile};
 use crate::config::Config;
 use crate::finding::Finding;
 
 /// Human-readable report with per-finding file locations.
 pub fn render_human(findings: &[Finding], files_scanned: usize, rules_enabled: usize) -> String {
+    render_human_with_profile(findings, files_scanned, rules_enabled, terminal_profile())
+}
+
+fn render_human_with_profile(
+    findings: &[Finding],
+    files_scanned: usize,
+    rules_enabled: usize,
+    profile: TerminalProfile,
+) -> String {
     let mut out = String::new();
 
     for finding in findings {
-        out.push_str(&format!(
-            "{}:{}:{}  {:<8} {}  {} [{}]\n",
-            finding.file.display(),
-            finding.line,
-            finding.column,
-            finding.severity.name(),
-            finding.rule_id,
-            finding.message,
-            finding.rule_name,
-        ));
+        let path = display_path(&finding.file);
+        if profile.narrow || path.len() + finding.message.len() > profile.width {
+            out.push_str(&format!("{}:{}:{}\n", path, finding.line, finding.column));
+            out.push_str(&format!(
+                "  {} {}  {} [{}]\n",
+                finding.severity.name(),
+                finding.rule_id,
+                finding.message,
+                finding.rule_name,
+            ));
+        } else {
+            out.push_str(&format!(
+                "{}:{}:{}  {:<8} {}  {} [{}]\n",
+                path,
+                finding.line,
+                finding.column,
+                finding.severity.name(),
+                finding.rule_id,
+                finding.message,
+                finding.rule_name,
+            ));
+        }
         out.push_str(&format!("      | {}\n", finding.snippet));
         if let Some(suggestion) = &finding.suggestion {
             out.push_str(&format!("      = help: {}\n", suggestion));
@@ -43,6 +65,10 @@ pub fn render_human(findings: &[Finding], files_scanned: usize, rules_enabled: u
         rules_enabled
     ));
     out
+}
+
+fn display_path(path: &std::path::Path) -> String {
+    path.display().to_string().replace('\\', "/")
 }
 
 /// JSON array of findings.
@@ -262,7 +288,16 @@ mod tests {
 
     #[test]
     fn human_report_shows_location() {
-        let report = render_human(&[sample()], 3, 9);
+        let report = render_human_with_profile(
+            &[sample()],
+            3,
+            9,
+            TerminalProfile {
+                ascii_only: false,
+                narrow: false,
+                width: 120,
+            },
+        );
         assert!(report.contains("src/main.rs:2:5"));
         assert!(report.contains("FE001"));
         assert!(report.contains("help: Implement the code path or remove the placeholder macro."));
@@ -271,8 +306,49 @@ mod tests {
 
     #[test]
     fn human_report_repeats_file_for_each_finding() {
-        let report = render_human(&[sample(), sample()], 3, 9);
+        let report = render_human_with_profile(
+            &[sample(), sample()],
+            3,
+            9,
+            TerminalProfile {
+                ascii_only: false,
+                narrow: false,
+                width: 120,
+            },
+        );
         assert_eq!(report.matches("src/main.rs:2:5").count(), 2);
+    }
+
+    #[test]
+    fn human_report_stacks_findings_on_narrow_output() {
+        let report = render_human_with_profile(
+            &[sample()],
+            3,
+            9,
+            TerminalProfile {
+                ascii_only: true,
+                narrow: true,
+                width: 80,
+            },
+        );
+        assert!(report.contains("src/main.rs:2:5\n  warning FE001"));
+    }
+
+    #[test]
+    fn human_report_normalizes_windows_paths() {
+        let mut finding = sample();
+        finding.file = PathBuf::from(r"src\rules\mod.rs");
+        let report = render_human_with_profile(
+            &[finding],
+            3,
+            9,
+            TerminalProfile {
+                ascii_only: false,
+                narrow: false,
+                width: 120,
+            },
+        );
+        assert!(report.contains("src/rules/mod.rs:2:5"));
     }
 
     #[test]
@@ -319,7 +395,16 @@ mod tests {
     #[test]
     fn empty_findings_render_cleanly() {
         assert_eq!(render_json(&[]), "[]");
-        let report = render_human(&[], 5, 9);
+        let report = render_human_with_profile(
+            &[],
+            5,
+            9,
+            TerminalProfile {
+                ascii_only: false,
+                narrow: false,
+                width: 120,
+            },
+        );
         assert!(report.contains("0 finding(s)"));
     }
 }

@@ -1,6 +1,10 @@
-struct TerminalProfile {
-    ascii_only: bool,
-    narrow: bool,
+use std::io::{self, IsTerminal};
+
+#[derive(Clone, Copy)]
+pub(crate) struct TerminalProfile {
+    pub ascii_only: bool,
+    pub narrow: bool,
+    pub width: usize,
 }
 
 pub fn usage_text() -> String {
@@ -98,26 +102,47 @@ pub fn intro_text() -> String {
     }
 }
 
-fn terminal_profile() -> TerminalProfile {
+pub(crate) fn terminal_profile() -> TerminalProfile {
+    terminal_profile_from_env(io::stdout().is_terminal(), io::stderr().is_terminal())
+}
+
+fn terminal_profile_from_env(stdout_terminal: bool, stderr_terminal: bool) -> TerminalProfile {
     let term = std::env::var("TERM")
         .unwrap_or_default()
         .to_ascii_lowercase();
     let dumb = term == "dumb";
+    let redirected_stdout = !stdout_terminal;
     let ascii_env = std::env::var("FE203_ASCII")
         .map(|v| {
             let v = v.trim().to_ascii_lowercase();
             v == "1" || v == "true" || v == "yes"
         })
         .unwrap_or(false);
-    let no_color = std::env::var("NO_COLOR").is_ok();
+    let modern_windows_terminal = std::env::var("WT_SESSION").is_ok()
+        || std::env::var("ANSICON").is_ok()
+        || std::env::var("ConEmuANSI")
+            .map(|v| v.eq_ignore_ascii_case("on"))
+            .unwrap_or(false)
+        || term.contains("xterm")
+        || term.contains("ansi")
+        || term.contains("cygwin")
+        || term.contains("msys")
+        || term.contains("utf");
     let cols = std::env::var("COLUMNS")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
-        .unwrap_or(100);
+        .unwrap_or_else(|| if redirected_stdout { 80 } else { 100 });
+
+    let ascii_only = ascii_env
+        || dumb
+        || redirected_stdout
+        || (cfg!(windows) && !modern_windows_terminal);
+    let narrow = cols < 90 || dumb || redirected_stdout || !stderr_terminal;
 
     TerminalProfile {
-        ascii_only: dumb || ascii_env,
-        narrow: cols < 90 || dumb || no_color,
+        ascii_only,
+        narrow,
+        width: cols.max(60),
     }
 }
 
@@ -158,5 +183,29 @@ mod tests {
         let usage = usage_text();
         assert!(usage.contains("--benchmark [N]"));
         assert!(usage.contains("Run N benchmark scans against the target folder path"));
+    }
+
+    #[test]
+    fn redirected_output_uses_ascii_and_narrow_layout() {
+        let profile = terminal_profile_from_env(false, false);
+        assert!(profile.ascii_only);
+        assert!(profile.narrow);
+        assert_eq!(profile.width, 80);
+    }
+
+    #[test]
+    fn interactive_output_keeps_wide_defaults() {
+        // SAFETY: test-local environment mutation.
+        unsafe {
+            std::env::remove_var("COLUMNS");
+            std::env::remove_var("TERM");
+            std::env::remove_var("WT_SESSION");
+            std::env::remove_var("ANSICON");
+            std::env::remove_var("ConEmuANSI");
+            std::env::remove_var("FE203_ASCII");
+        }
+        let profile = terminal_profile_from_env(true, true);
+        assert!(!profile.narrow);
+        assert_eq!(profile.width, 100);
     }
 }

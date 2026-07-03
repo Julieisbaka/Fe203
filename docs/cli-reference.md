@@ -181,7 +181,8 @@ Print CLI usage or the current package version.
 Help output adapts to terminal capabilities:
 
 - narrow terminals use wrapped option descriptions
-- `TERM=dumb` or `FE203_ASCII=1` uses ASCII-safe headings/symbols
+- redirected or capture-only stdout falls back to a plain narrow layout
+- `TERM=dumb`, `FE203_ASCII=1`, and legacy Windows console environments use ASCII-safe headings/symbols
 
 ## Output Model
 
@@ -207,6 +208,11 @@ Each finding includes:
 
 Human output prints each finding with its own `path:line:column` prefix so the
 location stays visible even when multiple findings come from the same file.
+
+On narrow terminals or redirected output, Fe203 switches to a stacked layout:
+the first line prints `path:line:column` and the second line prints severity,
+rule ID, and message. Paths are normalized to forward slashes so the same
+location format is used across Windows and Unix-like terminals.
 
 Human output also prints a `help:` line when the rule provides a suggestion.
 

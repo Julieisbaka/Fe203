@@ -1,5 +1,14 @@
 # Fe203 Changelog
 
+## `0.1.5`
+
+- Hardened CLI terminal detection so help, intro text, and human-readable findings fall back to safer plain layouts on redirected output and legacy terminal environments.
+- Updated human-readable findings to reflow into a stacked format on narrow terminals instead of forcing long one-line entries.
+- Normalized human-readable finding paths to forward slashes so location lines stay consistent across Windows and Unix-like terminals.
+- Tightened FE082 to inspect actual regex constructor arguments, reducing false positives from broad substring matching while still flagging runtime-built patterns.
+- Refined FE083 to use nearby validation context and regex builder statements so multi-line validation code is checked without reintroducing search-style false positives.
+- Improved regex helper parsing to ignore quantifier characters inside character classes when evaluating FE080 nested quantifiers.
+
 ## `0.1.4`
 
 - Updated human CLI output so every finding line includes its own file path and line/column location instead of relying on grouped file headers.
