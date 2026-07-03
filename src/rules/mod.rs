@@ -335,7 +335,7 @@ pub(crate) fn is_comment_line(line: &str) -> bool {
     trimmed.starts_with("//") || trimmed.starts_with('*') || trimmed.starts_with("/*")
 }
 
-pub(crate) fn contains_ascii_case_insensitive(haystack: &str, needle: &str) -> bool {
+pub(crate) fn contains_ignore_case(haystack: &str, needle: &str) -> bool {
     let h = haystack.as_bytes();
     let n = needle.as_bytes();
     if n.is_empty() || n.len() > h.len() {
@@ -352,7 +352,7 @@ pub(crate) fn contains_ascii_case_insensitive(haystack: &str, needle: &str) -> b
     false
 }
 
-pub(crate) fn identifier_occurrences_ignoring_comments_and_literals(
+pub(crate) fn count_identifier_uses(
     content: &str,
     name: &str,
 ) -> Vec<usize> {

@@ -135,7 +135,7 @@ mod tests {
     }
 
     #[test]
-    fn ignores_identifiers_and_comments() {
+    fn ignores_idents_and_comments() {
         let findings =
             scan_all("// todo!() in a comment\nlet my_todo = 1;\nlet dbgx = dbg_helper();\n");
         assert!(findings.is_empty());

@@ -218,7 +218,7 @@ mod tests {
     }
 
     #[test]
-    fn detects_literal_traversal_segment() {
+    fn detects_traversal_segment() {
         let findings = scan_all("let p = base.join(\"../secret\");\n");
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule_id, "FE120");
@@ -244,7 +244,7 @@ mod tests {
     }
 
     #[test]
-    fn detects_traversal_in_pathbuf_from() {
+    fn detects_traversal_in_pathbuf() {
         let findings = scan_all("let p = std::path::PathBuf::from(\"../secret\");\n");
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule_id, "FE120");

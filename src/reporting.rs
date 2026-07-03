@@ -268,7 +268,7 @@ mod tests {
     }
 
     #[test]
-    fn human_report_includes_location_and_summary() {
+    fn human_report_shows_location() {
         let report = render_human(&[sample()], 3, 9);
         assert!(report.contains("src/main.rs"));
         assert!(report.contains("2:5"));
@@ -278,7 +278,7 @@ mod tests {
     }
 
     #[test]
-    fn json_output_escapes_and_structures() {
+    fn json_output_escapes_values() {
         let json = render_json(&[sample()]);
         assert!(json.starts_with('['));
         assert!(json.ends_with(']'));
@@ -290,28 +290,28 @@ mod tests {
     }
 
     #[test]
-    fn pretty_json_output_contains_newlines() {
+    fn pretty_json_has_newlines() {
         let pretty = render_json_pretty(&[sample()]);
         assert!(pretty.contains('\n'));
         assert!(pretty.contains("\"rule_id\": \"FE001\""));
     }
 
     #[test]
-    fn sarif_output_contains_schema_and_rule_id() {
+    fn sarif_output_has_rule_id() {
         let sarif = render_sarif(&[sample()]);
         assert!(sarif.contains("\"version\":\"2.1.0\""));
         assert!(sarif.contains("\"ruleId\":\"FE001\""));
     }
 
     #[test]
-    fn pretty_sarif_output_contains_newlines() {
+    fn pretty_sarif_has_newlines() {
         let sarif = render_sarif_pretty(&[sample()]);
         assert!(sarif.contains('\n'));
         assert!(sarif.contains("\"ruleId\": \"FE001\""));
     }
 
     #[test]
-    fn baseline_filters_existing_finding() {
+    fn baseline_filters_known_finding() {
         let finding = sample();
         let line = baseline_lines(std::slice::from_ref(&finding)).join("\n");
         let filtered = apply_baseline(&[finding], &line);

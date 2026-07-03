@@ -40,7 +40,7 @@ impl Rule for DeadSuppressionCommentRule {
     }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
-        let active_ids = active_finding_ids_without_suppressions(ctx);
+        let active_ids = unsuppressed_finding_ids(ctx);
         dead_suppression_findings(ctx, &active_ids)
     }
 }
@@ -89,7 +89,7 @@ struct SuppressionDirective {
     snippet: String,
 }
 
-fn active_finding_ids_without_suppressions(ctx: &FileContext) -> HashSet<&'static str> {
+fn unsuppressed_finding_ids(ctx: &FileContext) -> HashSet<&'static str> {
     let unsuppressed = ctx
         .content
         .replace("fe203-ignore-file", "fe203-note-file")

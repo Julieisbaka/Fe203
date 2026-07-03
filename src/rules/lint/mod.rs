@@ -56,7 +56,7 @@ mod tests {
     }
 
     #[test]
-    fn detects_empty_doc_comments_and_empty_comments() {
+    fn detects_empty_doc_and_line_comments() {
         let findings = scan_all("///\n//!\n//\n/* */\n");
         let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
         assert_eq!(ids, ["FE061", "FE061", "FE062", "FE062"]);
@@ -69,7 +69,7 @@ mod tests {
     }
 
     #[test]
-    fn detects_unused_variable_and_constant() {
+    fn detects_unused_variable_and_const() {
         let findings = scan_all(
             "fn f() {\n    let temp = 1;\n    const MAX_RETRY: usize = 3;\n    println!(\"{}\", temp);\n}\n",
         );
@@ -78,7 +78,7 @@ mod tests {
     }
 
     #[test]
-    fn ignores_string_literals_when_counting_variable_usage() {
+    fn ignores_string_literals_in_usage_count() {
         let findings =
             scan_all("fn f() {\n    let secret = 1;\n    let _path = \"../secret\";\n}\n");
         let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
@@ -93,7 +93,7 @@ mod tests {
     }
 
     #[test]
-    fn flags_shadowed_binding_when_only_new_binding_is_used() {
+    fn flags_shadowed_binding_only_new_used() {
         let findings = scan_all(
             "fn f() {\n    let value = 1;\n    let value = 2;\n    println!(\"{}\", value);\n}\n",
         );
@@ -102,7 +102,7 @@ mod tests {
     }
 
     #[test]
-    fn does_not_flag_binding_used_before_shadowing() {
+    fn keeps_binding_used_before_shadow() {
         let findings = scan_all(
             "fn f() {\n    let value = 1;\n    println!(\"{}\", value);\n    let value = 2;\n    println!(\"{}\", value);\n}\n",
         );
@@ -117,34 +117,34 @@ mod tests {
     }
 
     #[test]
-    fn ignores_blank_doc_line_used_as_paragraph_break() {
+    fn ignores_blank_doc_paragraph_break() {
         let findings = scan_all("//! Summary line.\n//!\n");
         assert!(findings.is_empty());
     }
 
     #[test]
-    fn flags_truly_isolated_empty_doc_comment() {
+    fn flags_isolated_empty_doc_comment() {
         let findings = scan_all("///\nfn f() {}\n");
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule_id, "FE061");
     }
 
     #[test]
-    fn detects_test_without_product_reference() {
+    fn detects_test_missing_product_ref() {
         let findings = scan_all("#[test]\nfn t() { assert_eq!(2, 1 + 1); }\n");
         let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
         assert!(ids.iter().any(|id| *id == "FE065"));
     }
 
     #[test]
-    fn ignores_test_with_crate_reference() {
+    fn ignores_test_with_crate_ref() {
         let findings =
             scan_all("#[test]\nfn t() { assert!(crate::parser::parse(\"x\").is_ok()); }\n");
         assert!(findings.is_empty());
     }
 
     #[test]
-    fn ignores_test_with_binary_invocation_reference() {
+    fn ignores_test_with_binary_ref() {
         let findings = scan_all(
             "#[tokio::test]\nasync fn t() { let _ = std::process::Command::new(\"fe203\"); }\n",
         );
@@ -158,7 +158,7 @@ mod tests {
     }
 
     #[test]
-    fn respects_ignore_for_test_reference_rule() {
+    fn respects_ignore_for_test_ref_rule() {
         let findings = scan_all(
             "// fe203-ignore-file FE065,FE075\n#[test]\nfn t() { assert_eq!(2, 1 + 1); }\n",
         );
@@ -166,30 +166,29 @@ mod tests {
     }
 
     #[test]
-    fn flags_dead_suppression_rule_id() {
+    fn flags_dead_suppression_id() {
         let findings = scan_all("// fe203-ignore FE001\nfn f() {}\n");
         let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
         assert_eq!(ids, ["FE066"]);
     }
 
     #[test]
-    fn does_not_flag_suppression_when_rule_would_match() {
+    fn keeps_suppression_when_rule_matches() {
         let findings = scan_all("// fe203-ignore FE001\nfn f() { todo!(); }\n");
         assert!(findings.is_empty());
     }
 
     #[test]
-    fn flags_assert_only_test_without_product_calls() {
+    fn flags_assert_only_test_missing_calls() {
         let findings = scan_all("#[test]\nfn trivial() { assert_eq!(2, 1 + 1); }\n");
         let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
         assert!(ids.iter().any(|id| *id == "FE075"));
     }
 
     #[test]
-    fn does_not_flag_assert_test_with_product_reference() {
-        let findings = scan_all(
-            "#[test]\nfn real() { assert!(crate::parser::parse(\"x\").is_ok()); }\n",
-        );
+    fn keeps_assert_test_with_product_ref() {
+        let findings =
+            scan_all("#[test]\nfn real() { assert!(crate::parser::parse(\"x\").is_ok()); }\n");
         let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
         assert!(ids.iter().all(|id| *id != "FE075"));
     }

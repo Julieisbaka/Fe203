@@ -1,5 +1,13 @@
 # Fe203 Changelog
 
+## `0.1.1`
+
+- Refactored scanner internals into focused modules (`scanner/discovery`, `scanner/scan`, `scanner/cache`, `scanner/patterns`) while preserving public scanner APIs.
+- Added bounded parallel file scanning using available CPU parallelism with deterministic output ordering.
+- Switched runtime scanning to streamed chunk processing (discover and scan incrementally) to reduce peak memory usage on large repositories.
+- Optimized FE066 (`dead-suppression-comment`) by evaluating stale suppressions from already-collected per-file active rule IDs, avoiding an extra full in-rule rescan pass.
+- Updated progress reporting to include scanned/discovered file counts and scan throughput (files/second).
+
 ## `0.1.0`
 
 - Expanded the `secrets` rule family with FE043 (`hardcoded-token`) and FE044 (`hardcoded-credential-url`).

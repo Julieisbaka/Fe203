@@ -3,7 +3,7 @@
 // fe203-ignore-file FE040, FE041, FE042, FE043, FE044
 
 use crate::finding::{Category, Finding, Severity};
-use crate::rules::{contains_ascii_case_insensitive, is_rule_ignored, FileContext, Rule};
+use crate::rules::{contains_ignore_case, is_rule_ignored, FileContext, Rule};
 
 /// Detects `<identifier containing keyword> = "non-empty literal"`.
 pub struct SecretAssignmentRule {
@@ -65,7 +65,7 @@ fn assigned_string_literal(right: &str) -> Option<&str> {
     Some(&rest[..end])
 }
 
-fn looks_like_credential_url_literal(right: &str) -> bool {
+fn looks_like_credential_url(right: &str) -> bool {
     let Some(value) = assigned_string_literal(right) else {
         return false;
     };
@@ -134,7 +134,7 @@ impl Rule for CredentialUrlAssignmentRule {
                 continue;
             };
             let right = &line[eq + 1..];
-            if looks_like_credential_url_literal(right) {
+            if looks_like_credential_url(right) {
                 findings.push(
                     self.finding(
                         ctx,
@@ -194,7 +194,7 @@ impl Rule for SecretAssignmentRule {
             let matched = self
                 .keywords
                 .iter()
-                .find(|kw| contains_ascii_case_insensitive(left, kw));
+                .find(|kw| contains_ignore_case(left, kw));
             if let Some(keyword) = matched {
                 findings.push(self.finding(
                     ctx,
@@ -264,7 +264,7 @@ mod tests {
     }
 
     #[test]
-    fn ignores_empty_and_non_literal_values() {
+    fn ignores_empty_and_non_literal() {
         let findings = scan_all(concat!(
             "let password = \"\";\n",
             "let password = read_password();\n",
@@ -287,7 +287,7 @@ mod tests {
     }
 
     #[test]
-    fn detects_credential_url_but_ignores_missing_password() {
+    fn detects_credential_url_no_password() {
         let findings = scan_all(concat!(
             "let db = \"postgres://user:pass@db.local/app\";\n",
             "let no_pass = \"postgres://user@db.local/app\";\n",

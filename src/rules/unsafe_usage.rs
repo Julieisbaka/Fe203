@@ -157,7 +157,7 @@ mod tests {
     }
 
     #[test]
-    fn ignores_comments_and_identifiers() {
+    fn ignores_comments_and_idents() {
         // fe203-ignore FE021
         let findings = scan_all("// unsafe fn in a comment\nlet not_unsafe_here = 1;\n");
         assert!(findings.is_empty());

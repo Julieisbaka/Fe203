@@ -151,7 +151,7 @@ mod tests {
     }
 
     #[test]
-    fn detects_command_execution_presence() {
+    fn detects_command_execution() {
         let findings = scan_all("std::process::Command::new(\"ls\").spawn();\n");
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule_id, "FE100");

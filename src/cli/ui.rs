@@ -136,7 +136,7 @@ mod tests {
     }
 
     #[test]
-    fn usage_text_respects_narrow_columns() {
+    fn usage_text_wraps_narrow_columns() {
         // SAFETY: test-local environment mutation.
         unsafe {
             std::env::set_var("COLUMNS", "70");

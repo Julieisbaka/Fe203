@@ -102,7 +102,13 @@ impl Rule for AssertOnlyTestsWithoutProductCallsRule {
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
         let mut findings = Vec::new();
         for test_fn in extract_test_functions(ctx.content) {
-            if is_rule_ignored(ctx, test_fn.line_no, self.id(), self.name(), self.category()) {
+            if is_rule_ignored(
+                ctx,
+                test_fn.line_no,
+                self.id(),
+                self.name(),
+                self.category(),
+            ) {
                 continue;
             }
             if has_product_reference(test_fn.body) {

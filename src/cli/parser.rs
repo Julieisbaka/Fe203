@@ -245,7 +245,7 @@ mod tests {
     }
 
     #[test]
-    fn rule_filter_is_case_insensitive() {
+    fn rule_filter_ignores_case() {
         let args: Vec<String> = ["--rules", "fe001"].iter().map(|s| s.to_string()).collect();
         let opts = parse(&args).unwrap();
         let rules = all_rules();
@@ -254,7 +254,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_explain_and_init_config() {
+    fn parses_explain_and_init_flags() {
         let args: Vec<String> = [
             "--explain",
             "fe080",

@@ -1,6 +1,6 @@
 use crate::finding::{Category, Finding, Severity};
 use crate::rules::{
-    identifier_occurrences_ignoring_comments_and_literals, is_rule_ignored, FileContext, Rule,
+    count_identifier_uses, is_rule_ignored, FileContext, Rule,
 };
 
 struct Declaration {
@@ -225,7 +225,7 @@ fn has_usage_after_declaration(
     decl: &Declaration,
     all_decls: &[Declaration],
 ) -> bool {
-    let occurrences = identifier_occurrences_ignoring_comments_and_literals(content, &decl.name);
+    let occurrences = count_identifier_uses(content, &decl.name);
     let next_shadow_start = all_decls
         .iter()
         .filter(|d| d.name == decl.name && d.start > decl.start)

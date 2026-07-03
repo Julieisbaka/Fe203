@@ -267,7 +267,7 @@ mod tests {
     }
 
     #[test]
-    fn ruleset_toggle_disables_category() {
+    fn ruleset_toggle_disables_rules() {
         let config = Config::parse("[rulesets]\ndebug = false\n").unwrap();
         for rule in all_rules() {
             let expected = rule.category().name() != "debug";
@@ -307,7 +307,7 @@ mod tests {
     }
 
     #[test]
-    fn generates_template_from_gitignore() {
+    fn template_from_gitignore() {
         let dir = std::env::temp_dir().join(format!("fe203-template-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();

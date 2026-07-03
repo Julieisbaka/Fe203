@@ -290,7 +290,7 @@ fn string_literals_in_line(line: &str) -> Vec<(usize, String)> {
     let bytes = line.as_bytes();
     while i < bytes.len() {
         if bytes[i] == b'"' || bytes[i] == b'r' {
-            if let Some((pattern, consumed)) = parse_rust_string_literal_with_len(&line[i..]) {
+            if let Some((pattern, consumed)) = parse_string_literal_len(&line[i..]) {
                 found.push((i + 1, pattern));
                 i += consumed;
                 continue;
@@ -304,10 +304,10 @@ fn string_literals_in_line(line: &str) -> Vec<(usize, String)> {
 }
 
 fn parse_rust_string_literal(input: &str) -> Option<String> {
-    parse_rust_string_literal_with_len(input).map(|(pattern, _)| pattern)
+    parse_string_literal_len(input).map(|(pattern, _)| pattern)
 }
 
-fn parse_rust_string_literal_with_len(input: &str) -> Option<(String, usize)> {
+fn parse_string_literal_len(input: &str) -> Option<(String, usize)> {
     if input.starts_with('"') {
         parse_normal_string(input)
     } else if input.starts_with('r') {
@@ -425,14 +425,14 @@ mod tests {
     }
 
     #[test]
-    fn detects_nested_quantifier_regex() {
+    fn detects_nested_quantifier() {
         let findings = scan_all("let _ = regex::Regex::new(r\"(a+)+$\");\n");
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule_id, "FE080");
     }
 
     #[test]
-    fn detects_suspicious_broad_regex() {
+    fn detects_broad_regex() {
         let findings = scan_all("let _ = Regex::new(r\".*token.*.*\");\n");
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule_id, "FE081");
@@ -445,35 +445,35 @@ mod tests {
     }
 
     #[test]
-    fn detects_dynamic_regex_construction() {
+    fn detects_dynamic_regex_build() {
         let findings = scan_all("let re = Regex::new(format!(\"{}\", user));\n");
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule_id, "FE082");
     }
 
     #[test]
-    fn detects_unanchored_validation_regex() {
+    fn detects_unanchored_validation() {
         let findings = scan_all("let ok = re.is_match(r\"[a-z]+\");\n");
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule_id, "FE083");
     }
 
     #[test]
-    fn detects_unanchored_capture_regex() {
+    fn detects_unanchored_capture() {
         let findings = scan_all("let ok = re.captures(\"[a-z]+\");\n");
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule_id, "FE083");
     }
 
     #[test]
-    fn detects_builder_based_dynamic_regex() {
+    fn detects_builder_dynamic_regex() {
         let findings = scan_all("let re = RegexBuilder::new(format!(\"{}\", pattern));\n");
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule_id, "FE082");
     }
 
     #[test]
-    fn detects_empty_alternation_regex() {
+    fn detects_empty_alternation() {
         let findings = scan_all("let _ = Regex::new(r\"foo||bar\");\n");
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule_id, "FE081");
@@ -486,13 +486,13 @@ mod tests {
     }
 
     #[test]
-    fn ignores_plain_find_calls_unrelated_to_regex() {
+    fn ignores_unrelated_find_calls() {
         let findings = scan_all("let todo = rules.iter().find(|r| r.id() == \"FE001\");\n");
         assert!(findings.is_empty());
     }
 
     #[test]
-    fn ignores_anchored_validation_regex() {
+    fn ignores_anchored_validation() {
         let findings = scan_all("let ok = re.is_match(r\"^[a-z]+$\");\n");
         assert!(findings.is_empty());
     }
