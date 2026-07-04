@@ -145,10 +145,7 @@ fn query_fe203_version(exe: &std::path::Path) -> Option<Fe203Version> {
 }
 
 #[cfg(windows)]
-fn is_newer_version(
-    candidate: Option<Fe203Version>,
-    best: Option<Fe203Version>,
-) -> bool {
+fn is_newer_version(candidate: Option<Fe203Version>, best: Option<Fe203Version>) -> bool {
     match (candidate, best) {
         (Some(candidate), Some(best)) => candidate > best,
         (Some(_), None) => true,
@@ -357,7 +354,10 @@ mod tests {
             std::env::set_var("PATH", r"C:\Tools\Fe203;C:\Other");
         }
         let entries = path_entries();
-        assert_eq!(entries.first().map(|entry| entry.as_str()), Some(r"c:\tools\fe203"));
+        assert_eq!(
+            entries.first().map(|entry| entry.as_str()),
+            Some(r"c:\tools\fe203")
+        );
         assert!(process_path_starts_with_dir(r"c:\tools\fe203"));
         assert!(!process_path_starts_with_dir(r"c:\other"));
     }

@@ -1,7 +1,6 @@
 # FE203 Copilot Instructions
 
 Project goals:
-- Keep FE203 fast, std-only, and primarily text-first, using lightweight syntax-aware parsing only where it clearly improves signal.
 - Preserve stable rule IDs and deterministic behavior.
 - Keep docs and CLI behavior aligned.
 
@@ -11,7 +10,7 @@ General engineering rules:
 - Prefer small, focused edits over broad refactors.
 - Preserve existing naming and output formats unless the task requires a change.
 - Add or update tests for behavior changes in rules, parsing, reporting, or scanning.
-- Prefer small hand-rolled syntax helpers over heavyweight parsing frameworks when a rule benefits from limited AST-like structure.
+- Prefer hand-rolled syntax helpers over heavyweight parsing frameworks when a rule benefits from limited AST-like structure.
 
 Documentation update policy:
 - When CLI flags, output formats, config keys, or behavior changes, update docs in the same change.
