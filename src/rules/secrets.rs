@@ -6,12 +6,25 @@ use crate::finding::{Category, Finding, Severity};
 use crate::rules::{contains_ignore_case, is_rule_ignored, FileContext, Rule};
 
 const PROVIDER_TOKEN_PREFIXES: &[&str] = &[
-    "ghp_", "github_pat_", "sk_live_", "sk_test_", "xoxb-", "xoxp-", "AKIA", "ya29.",
+    "ghp_",
+    "github_pat_",
+    "sk_live_",
+    "sk_test_",
+    "xoxb-",
+    "xoxp-",
+    "AKIA",
+    "ya29.",
     "glpat-",
 ];
 const CREDENTIAL_URL_SCHEMES: &[&str] = &[
-    "postgres://", "postgresql://", "mysql://", "mongodb://", "redis://", "amqp://",
-    "http://", "https://",
+    "postgres://",
+    "postgresql://",
+    "mysql://",
+    "mongodb://",
+    "redis://",
+    "amqp://",
+    "http://",
+    "https://",
 ];
 
 /// Detects `<identifier containing keyword> = "non-empty literal"`.
@@ -102,7 +115,10 @@ fn looks_like_credential_url(right: &str) -> bool {
     let password = &userinfo[colon + 1..];
     colon > 0
         && !password.is_empty()
-        && !matches!(password.to_ascii_lowercase().as_str(), "password" | "example")
+        && !matches!(
+            password.to_ascii_lowercase().as_str(),
+            "password" | "example"
+        )
 }
 
 fn looks_like_provider_token(right: &str) -> bool {
@@ -223,7 +239,10 @@ impl Rule for SecretAssignmentRule {
                 .iter()
                 .find(|kw| contains_ignore_case(left, kw));
             if let Some(keyword) = matched {
-                if self.id == "FE043" && !looks_like_provider_token(right) && !contains_ignore_case(left, "token") {
+                if self.id == "FE043"
+                    && !looks_like_provider_token(right)
+                    && !contains_ignore_case(left, "token")
+                {
                     // Keep token findings reasonably high-signal unless the identifier
                     // explicitly says token or the literal matches a known provider prefix.
                     continue;

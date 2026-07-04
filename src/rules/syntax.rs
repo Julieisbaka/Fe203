@@ -110,7 +110,9 @@ pub(crate) fn collect_invocations<'a>(content: &'a str) -> Vec<Invocation<'a>> {
                     idx += 1;
                 }
             }
-            b if is_ident_start(b) => idx = parse_invocation_from(content, &line_starts, idx, &mut out),
+            b if is_ident_start(b) => {
+                idx = parse_invocation_from(content, &line_starts, idx, &mut out)
+            }
             _ => idx += 1,
         }
     }
@@ -277,7 +279,12 @@ fn find_matching_brace(bytes: &[u8], open: usize) -> Option<usize> {
     find_matching_delimiter(bytes, open, b'{', b'}')
 }
 
-fn find_matching_delimiter(bytes: &[u8], open: usize, open_delim: u8, close_delim: u8) -> Option<usize> {
+fn find_matching_delimiter(
+    bytes: &[u8],
+    open: usize,
+    open_delim: u8,
+    close_delim: u8,
+) -> Option<usize> {
     let mut depth = 0usize;
     let mut idx = open;
     while idx < bytes.len() {
@@ -344,7 +351,9 @@ fn starts_with_fn(bytes: &[u8], idx: usize) -> bool {
     bytes.get(idx) == Some(&b'f')
         && bytes.get(idx + 1) == Some(&b'n')
         && (idx == 0 || !is_ident_continue(bytes[idx.saturating_sub(1)]))
-        && bytes.get(idx + 2).is_some_and(|b| b.is_ascii_whitespace() || *b == b'(')
+        && bytes
+            .get(idx + 2)
+            .is_some_and(|b| b.is_ascii_whitespace() || *b == b'(')
 }
 
 fn skip_attribute(bytes: &[u8], mut idx: usize) -> usize {
@@ -626,10 +635,18 @@ mod tests {
         let invocations = collect_invocations(
             "assert_eq!(2, crate::parse(\"x\")); Command::new(\"fe203\"); env!(\"CARGO_BIN_EXE_fe203\");",
         );
-        assert!(invocations.iter().any(|call| call.path == "assert_eq" && call.kind == InvocationKind::Macro));
-        assert!(invocations.iter().any(|call| call.path == "crate::parse" && call.kind == InvocationKind::Call));
-        assert!(invocations.iter().any(|call| call.path == "Command::new" && call.kind == InvocationKind::Call));
-        assert!(invocations.iter().any(|call| call.path == "env" && call.kind == InvocationKind::Macro));
+        assert!(invocations
+            .iter()
+            .any(|call| call.path == "assert_eq" && call.kind == InvocationKind::Macro));
+        assert!(invocations
+            .iter()
+            .any(|call| call.path == "crate::parse" && call.kind == InvocationKind::Call));
+        assert!(invocations
+            .iter()
+            .any(|call| call.path == "Command::new" && call.kind == InvocationKind::Call));
+        assert!(invocations
+            .iter()
+            .any(|call| call.path == "env" && call.kind == InvocationKind::Macro));
     }
 
     #[test]
@@ -646,14 +663,19 @@ mod tests {
 
     #[test]
     fn collects_receiver_chain_and_ignores_string_braces() {
-        let chains = collect_method_chains(
-            "let out = dest.join(entry_name); let s = \"x.join(y)\";\n",
-        );
+        let chains =
+            collect_method_chains("let out = dest.join(entry_name); let s = \"x.join(y)\";\n");
         let chain = chains.iter().find(|c| c.root == "dest").unwrap();
         assert_eq!(chain.calls.len(), 1);
         assert_eq!(chain.calls[0].name, "join");
         assert_eq!(chain.calls[0].args, "entry_name");
-        assert_eq!(chains.iter().filter(|c| c.calls.iter().any(|m| m.name == "join")).count(), 1);
+        assert_eq!(
+            chains
+                .iter()
+                .filter(|c| c.calls.iter().any(|m| m.name == "join"))
+                .count(),
+            1
+        );
     }
 
     #[test]

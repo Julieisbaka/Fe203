@@ -9,7 +9,12 @@ use crate::rules::{is_rule_ignored, word_occurrences, FileContext, Rule};
 const SHELL_PROGRAMS: &[&str] = &["sh", "bash", "cmd", "cmd.exe", "powershell", "pwsh"];
 const SHELL_FLAGS: &[&str] = &["-c", "/c", "/C", "-Command"];
 const DYNAMIC_MARKERS: &[&str] = &["format!(", "concat!(", ".to_string()", "push_str(", " + "];
-const ENV_VAR_MARKERS: &[&str] = &["std::env::var(", "env::var(", "std::env::args(", "env::args("];
+const ENV_VAR_MARKERS: &[&str] = &[
+    "std::env::var(",
+    "env::var(",
+    "std::env::args(",
+    "env::args(",
+];
 
 /// Detects presence of `Command::new(` / `std::process::Command::new(`.
 pub struct CommandExecutionRule;
