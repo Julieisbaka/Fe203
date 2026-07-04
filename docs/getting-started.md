@@ -27,8 +27,9 @@ Install from release binaries:
 2. Extract `fe203`/`fe203.exe`.
 3. Run it once.
 
-On Windows, Fe203 attempts to add its own folder to your user `PATH` on first
-run. Open a new terminal afterward.
+On Windows, Fe203 keeps its user `PATH` registration up to date and prioritizes
+the newest detected `fe203.exe` on startup so older installs are less likely to
+shadow newer ones. Open a new terminal after install or upgrade.
 
 Set `FE203_NO_AUTO_PATH=1` to disable automatic PATH registration.
 
@@ -78,6 +79,17 @@ Benchmark repeated scans against a folder:
 fe203 --benchmark
 fe203 --benchmark 10 benchmarks/workload
 ```
+
+Check for updates and install the newest release binary:
+
+```sh
+fe203 --check-update
+fe203 --self-update
+```
+
+`--self-update` selects the release asset for your current OS/architecture
+when available, replaces the existing binary in place, and starts the updated
+CLI automatically.
 
 ## Your First Config
 

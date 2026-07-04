@@ -18,6 +18,8 @@ pub struct CliOptions {
     pub max: bool,
     /// Iteration count when benchmarking is enabled via --benchmark.
     pub benchmark_iterations: Option<usize>,
+    pub check_update: bool,
+    pub self_update: bool,
     pub help: bool,
     pub version: bool,
     /// Uppercased rule IDs, if `--rules` was given.
@@ -71,6 +73,8 @@ pub fn parse(args: &[String]) -> Result<CliOptions, String> {
                 }
                 opts.benchmark_iterations = Some(iterations);
             }
+            "--check-update" => opts.check_update = true,
+            "--self-update" => opts.self_update = true,
             other if other.starts_with("--benchmark=") => {
                 let value = other
                     .split_once('=')
@@ -369,6 +373,17 @@ mod tests {
             .collect();
         let opts_equals = parse(&args_equals).unwrap();
         assert_eq!(opts_equals.benchmark_iterations, Some(3));
+    }
+
+    #[test]
+    fn parses_update_flags() {
+        let args: Vec<String> = ["--check-update", "--self-update"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let opts = parse(&args).unwrap();
+        assert!(opts.check_update);
+        assert!(opts.self_update);
     }
 
     #[test]

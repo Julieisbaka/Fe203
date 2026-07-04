@@ -7,12 +7,12 @@ screen and exits.
 Only `.rs` files are scanned by default, plus any extra files listed in
 `[paths].include` inside `fe203.toml` (see [configuration.md](configuration.md)).
 
-On Windows, when run from a downloaded release binary, Fe203 attempts a
-one-time user `PATH` registration for its executable directory.
+On Windows, Fe203 updates user `PATH` registration to keep a working
+`fe203.exe` directory at the front and prefers the newest detected Fe203
+version available in `PATH`.
 
-When it updates `PATH`, Fe203 prefers its own executable directory at the front
-of the user path so an older `fe203.exe` earlier in `PATH` is less likely to
-shadow the current install.
+This reduces stale-binary shadowing when multiple installs exist (for example,
+an older release binary plus a newer Cargo-installed copy).
 
 Set `FE203_NO_AUTO_PATH=1` to disable this behavior.
 
@@ -167,6 +167,26 @@ Examples:
 fe203 --benchmark
 fe203 --benchmark 10 benchmarks/workload
 ```
+
+## `--check-update`
+
+Checks the latest GitHub Release and compares it to the current CLI version.
+
+- Prints `update available: <current> -> <latest>` when a newer version exists
+- Prints `fe203 is up to date (<current>)` when no newer release is found
+
+Added in `0.2.1`.
+
+## `--self-update`
+
+Downloads and installs the latest GitHub Release binary for Fe203.
+
+- Chooses the release asset matching the current OS/architecture when available
+- Schedules replacement of the current executable after the running process exits
+- Replaces the installed binary in place to avoid accumulating old copies
+- Automatically runs the updated CLI after install
+
+Added in `0.2.1`.
 
 ## Scan Pipeline Notes
 

@@ -1,5 +1,11 @@
 # Fe203 Changelog
 
+## `0.2.1`
+
+- Fixed Windows PATH auto-registration to prioritize the newest detected `fe203.exe` version across PATH entries so older installs do not keep shadowing newer upgrades.
+- Added `--check-update` to query GitHub Releases and report when a newer Fe203 version is available.
+- Added OS-aware `--self-update` to download the matching GitHub Release binary, replace the existing install in place, and launch the updated CLI automatically.
+
 ## `0.2.0`
 
 - Added a lightweight syntax-aware parser for annotated test functions and invocations, improving FE065/FE075 without introducing third-party AST dependencies.

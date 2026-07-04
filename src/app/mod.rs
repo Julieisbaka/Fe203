@@ -9,6 +9,7 @@ use crate::{cli, reporting, rules, scanner};
 mod cargo;
 mod path_setup;
 mod scan;
+mod update;
 
 const DEFAULT_BENCHMARK_TARGET: &str = "benchmarks/workload";
 
@@ -36,6 +37,17 @@ pub fn run(args: &[String]) -> i32 {
     if opts.version {
         println!("fe203 {}", env!("CARGO_PKG_VERSION"));
         return 0;
+    }
+
+    if opts.check_update && opts.self_update {
+        eprintln!("error: --check-update and --self-update cannot be used together");
+        return 2;
+    }
+    if opts.check_update {
+        return update::run_check_update(env!("CARGO_PKG_VERSION"));
+    }
+    if opts.self_update {
+        return update::run_self_update(env!("CARGO_PKG_VERSION"));
     }
 
     if opts.json && opts.sarif {

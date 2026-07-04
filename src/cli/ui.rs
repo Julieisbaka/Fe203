@@ -65,6 +65,14 @@ pub fn usage_text() -> String {
             "--benchmark [N]",
             "Run N benchmark scans against the target folder path (default: 5)",
         ),
+        (
+            "--check-update",
+            "Check GitHub Releases for a newer fe203 version",
+        ),
+        (
+            "--self-update",
+            "Download/install latest release binary for this OS",
+        ),
         ("-l, --list-rules", "List all available rules and exit"),
         ("-h, --help", "Print help"),
         ("-V, --version", "Print version"),
@@ -181,6 +189,13 @@ mod tests {
         let usage = usage_text();
         assert!(usage.contains("--benchmark [N]"));
         assert!(usage.contains("Run N benchmark scans against the target folder path"));
+    }
+
+    #[test]
+    fn usage_text_includes_update_options() {
+        let usage = usage_text();
+        assert!(usage.contains("--check-update"));
+        assert!(usage.contains("--self-update"));
     }
 
     #[test]

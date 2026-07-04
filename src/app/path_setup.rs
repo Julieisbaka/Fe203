@@ -1,4 +1,4 @@
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 pub(super) fn ensure_exe_dir_in_path() {
     #[cfg(not(windows))]
@@ -21,38 +21,34 @@ pub(super) fn ensure_exe_dir_in_path() {
         if is_development_executable_path(&exe) {
             return;
         }
-        if is_cargo_bin_executable_path(&exe) {
+
+        let preferred_exe = choose_preferred_fe203_executable(&exe);
+        if is_development_executable_path(&preferred_exe) {
             return;
         }
-        if path_resolves_current_exe(&exe) {
-            return;
-        }
-        let Some(dir) = exe.parent() else {
+
+        let Some(dir) = preferred_exe.parent() else {
             return;
         };
         let dir_str = dir.to_string_lossy().to_string();
+        let process_needs_update = !process_path_starts_with_dir(&dir_str);
 
-        if process_path_contains_dir(&dir_str) {
-            return;
+        if process_needs_update {
+            prioritize_process_path(&dir_str);
         }
 
         match prioritize_user_path_via_powershell(&dir_str) {
             Some(true) => {
-                prioritize_process_path(&dir_str);
                 eprintln!(
                     "info: prioritized {} in your user PATH; open a new terminal to use this fe203 globally",
                     dir.display()
                 );
             }
             Some(false) => {
-                // The persistent user PATH is already correct, but the current terminal
-                // session may still be stale.
-                prioritize_process_path(&dir_str);
+                // The persistent user PATH is already correct.
             }
             None => {
-                // Best effort: make fe203 available in this process even if persisting
-                // the user PATH failed.
-                prioritize_process_path(&dir_str);
+                // Best effort: current process PATH has already been updated.
                 eprintln!(
                     "warning: could not update user PATH automatically; add {} to your PATH manually",
                     dir.display()
@@ -80,23 +76,6 @@ fn is_development_executable_path(path: &std::path::Path) -> bool {
         .any(|pair| pair[0] == "target" && (pair[1] == "debug" || pair[1] == "release"))
 }
 
-#[cfg(windows)]
-fn is_cargo_bin_executable_path(path: &std::path::Path) -> bool {
-    let normalized = normalize_path_entry(&path.to_string_lossy());
-    if normalized.contains("/.cargo/bin/") || normalized.contains("\\.cargo\\bin\\") {
-        return true;
-    }
-
-    if let Ok(cargo_home) = std::env::var("CARGO_HOME") {
-        let cargo_bin = format!("{}\\bin", cargo_home.trim_end_matches(['\\', '/']));
-        if normalized.starts_with(&normalize_path_entry(&cargo_bin)) {
-            return true;
-        }
-    }
-
-    false
-}
-
 fn auto_path_disabled() -> bool {
     std::env::var("FE203_NO_AUTO_PATH")
         .map(|v| {
@@ -107,25 +86,109 @@ fn auto_path_disabled() -> bool {
 }
 
 #[cfg(windows)]
-fn process_path_contains_dir(dir: &str) -> bool {
+fn process_path_starts_with_dir(dir: &str) -> bool {
     let target = normalize_path_entry(dir);
-    path_entries().into_iter().any(|entry| entry == target)
+    path_entries()
+        .first()
+        .map(|entry| entry == &target)
+        .unwrap_or(false)
 }
 
 #[cfg(windows)]
-fn path_resolves_current_exe(exe: &std::path::Path) -> bool {
-    let Some(file_name) = exe.file_name() else {
-        return false;
+fn choose_preferred_fe203_executable(current_exe: &std::path::Path) -> std::path::PathBuf {
+    let Some(file_name) = current_exe.file_name() else {
+        return current_exe.to_path_buf();
     };
-    let target = canonical_or_normalized(exe);
 
-    path_entries()
-        .into_iter()
-        .map(std::path::PathBuf::from)
-        .map(|dir| dir.join(file_name))
-        .find(|candidate| candidate.is_file())
-        .map(|candidate| canonical_or_normalized(&candidate) == target)
-        .unwrap_or(false)
+    let mut candidates = Vec::new();
+    candidates.push(current_exe.to_path_buf());
+
+    for entry in path_entries() {
+        let candidate = std::path::PathBuf::from(entry).join(file_name);
+        if candidate.is_file() {
+            candidates.push(candidate);
+        }
+    }
+
+    let mut seen = std::collections::HashSet::new();
+    candidates.retain(|candidate| seen.insert(canonical_or_normalized(candidate)));
+
+    let mut best = current_exe.to_path_buf();
+    let mut best_version = query_fe203_version(current_exe);
+
+    for candidate in candidates {
+        let candidate_version = query_fe203_version(&candidate);
+        if is_newer_version(candidate_version, best_version) {
+            best = candidate;
+            best_version = candidate_version;
+        }
+    }
+
+    best
+}
+
+#[cfg(windows)]
+fn query_fe203_version(exe: &std::path::Path) -> Option<Fe203Version> {
+    let output = Command::new(exe)
+        .arg("--version")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8(output.stdout).ok()?;
+    parse_fe203_version_output(&stdout)
+}
+
+#[cfg(windows)]
+fn is_newer_version(
+    candidate: Option<Fe203Version>,
+    best: Option<Fe203Version>,
+) -> bool {
+    match (candidate, best) {
+        (Some(candidate), Some(best)) => candidate > best,
+        (Some(_), None) => true,
+        _ => false,
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct Fe203Version {
+    major: u64,
+    minor: u64,
+    patch: u64,
+}
+
+fn parse_fe203_version_output(output: &str) -> Option<Fe203Version> {
+    let version_text = output.split_whitespace().nth(1)?;
+    parse_semver_triplet(version_text)
+}
+
+fn parse_semver_triplet(version_text: &str) -> Option<Fe203Version> {
+    let core = version_text
+        .trim()
+        .trim_start_matches('v')
+        .split(['-', '+'])
+        .next()?;
+
+    let mut parts = core.split('.');
+    let major = parts.next()?.parse::<u64>().ok()?;
+    let minor = parts.next()?.parse::<u64>().ok()?;
+    let patch = parts.next()?.parse::<u64>().ok()?;
+
+    if parts.next().is_some() {
+        return None;
+    }
+
+    Some(Fe203Version {
+        major,
+        minor,
+        patch,
+    })
 }
 
 #[cfg(windows)]
@@ -220,9 +283,13 @@ fn ps_single_quote_escape(input: &str) -> String {
 mod tests {
     use super::*;
     use std::path::Path;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn recognizes_auto_path_disable_values() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         // SAFETY: test-local environment mutation.
         unsafe {
             std::env::set_var("FE203_NO_AUTO_PATH", "1");
@@ -261,29 +328,44 @@ mod tests {
     }
 
     #[test]
-    fn cargo_bin_executable_path_is_detected() {
-        assert!(is_cargo_bin_executable_path(Path::new(
-            r"C:\Users\caspe\.cargo\bin\fe203.exe"
-        )));
-        assert!(!is_cargo_bin_executable_path(Path::new(
-            r"C:\repo\target\debug\fe203.exe"
-        )));
+    fn parses_semver_triplets_from_version_output() {
+        assert_eq!(
+            parse_fe203_version_output("fe203 0.2.0\n"),
+            Some(Fe203Version {
+                major: 0,
+                minor: 2,
+                patch: 0,
+            })
+        );
+        assert_eq!(
+            parse_fe203_version_output("fe203 v1.10.3-beta.1+build\n"),
+            Some(Fe203Version {
+                major: 1,
+                minor: 10,
+                patch: 3,
+            })
+        );
+        assert_eq!(parse_fe203_version_output("something else"), None);
     }
 
     #[cfg(windows)]
     #[test]
-    fn dir_match_ignores_case_and_trailing_slash() {
+    fn path_front_match_ignores_case_and_trailing_slash() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         // SAFETY: test-local environment mutation.
         unsafe {
             std::env::set_var("PATH", r"C:\Tools\Fe203;C:\Other");
         }
-        assert!(process_path_contains_dir(r"c:\tools\fe203\"));
-        assert!(!process_path_contains_dir(r"c:\missing"));
+        let entries = path_entries();
+        assert_eq!(entries.first().map(|entry| entry.as_str()), Some(r"c:\tools\fe203"));
+        assert!(process_path_starts_with_dir(r"c:\tools\fe203"));
+        assert!(!process_path_starts_with_dir(r"c:\other"));
     }
 
     #[cfg(windows)]
     #[test]
     fn prioritize_process_path_moves_dir_to_front() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         // SAFETY: test-local environment mutation.
         unsafe {
             std::env::set_var("PATH", r"C:\Users\caspe\.cargo\bin;C:\Tools\Fe203;C:\Other");
