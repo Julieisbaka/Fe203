@@ -1,5 +1,10 @@
 # Fe203 Changelog
 
+## `0.2.2`
+
+- Fixed `--self-update` on Unix: staging now uses a unique temporary filename so a stale leftover from a previous failed update (potentially owned by a different user) no longer blocks the next attempt.
+- Fixed `--self-update` on Windows: the replacement script now retries renaming the old binary with backoff before copying the new one, handling brief post-exit file locks from antivirus scanners or the OS.
+
 ## `0.2.1`
 
 - Fixed Windows PATH auto-registration to prioritize the newest detected `fe203.exe` version across PATH entries so older installs do not keep shadowing newer upgrades.

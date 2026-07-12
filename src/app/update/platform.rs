@@ -12,11 +12,28 @@ pub(super) fn schedule_windows_replace_and_launch(
     version_text: &str,
 ) -> Result<(), String> {
     let pid = std::process::id();
+    // Wait for the current process to exit, then retry Copy-Item with backoff to
+    // handle brief post-exit file locks (e.g., from antivirus scanners). Rename
+    // the old binary out of the way before copying so a locked destination does
+    // not prevent the new binary from landing at the original path.
     let script = format!(
         "$ErrorActionPreference='Stop';\
 $pidToWait={pid};\
 while(Get-Process -Id $pidToWait -ErrorAction SilentlyContinue){{Start-Sleep -Milliseconds 200}};\
+$oldExe='{current}'+'.old';\
+$null=Remove-Item -Path $oldExe -Force -ErrorAction SilentlyContinue;\
+$retries=10;\
+for($i=0;$i -lt $retries;$i++){{\
+  try{{\
+    Rename-Item -Path '{current}' -NewName $oldExe -Force;\
+    break;\
+  }}catch{{\
+    if($i -ge $retries-1){{throw}}\
+    Start-Sleep -Milliseconds 500;\
+  }}\
+}};\
 Copy-Item -Path '{replacement}' -Destination '{current}' -Force;\
+Remove-Item -Path $oldExe -Force -ErrorAction SilentlyContinue;\
 & '{current}' --version;\
 Remove-Item -Path '{temp_dir}' -Recurse -Force -ErrorAction SilentlyContinue;",
         pid = pid,
@@ -46,7 +63,18 @@ pub(super) fn replace_binary_in_place_unix(
     current_exe: &Path,
     replacement_binary: &Path,
 ) -> Result<(), String> {
-    let replacement_path = current_exe.with_extension("new");
+    // Use a unique staging filename so a stale leftover from a previous failed
+    // update (potentially owned by a different user) does not block this attempt.
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let staging_name = format!(".fe203-update-{}-{nanos}", std::process::id());
+    let replacement_path = current_exe
+        .parent()
+        .ok_or_else(|| "current executable has no parent directory".to_string())?
+        .join(staging_name);
+
     std::fs::copy(replacement_binary, &replacement_path)
         .map_err(|err| format!("failed to stage replacement binary: {err}"))?;
 
