@@ -5,7 +5,7 @@ use super::*;
 fn replace_binary_in_place_unix_stages_with_unique_name() {
     use std::os::unix::fs::PermissionsExt;
 
-    let dir = std::path::Path::new("/tmp").join(format!(
+    let dir = std::env::temp_dir().join(format!(
         "fe203-test-replace-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
@@ -55,7 +55,7 @@ fn replace_binary_in_place_unix_stages_with_unique_name() {
 fn replace_binary_in_place_unix_succeeds_when_stale_new_file_exists() {
     use std::os::unix::fs::PermissionsExt;
 
-    let dir = std::path::Path::new("/tmp").join(format!(
+    let dir = std::env::temp_dir().join(format!(
         "fe203-test-stale-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
