@@ -25,7 +25,7 @@ $null=Remove-Item -Path $oldExe -Force -ErrorAction SilentlyContinue;\
 $retries=10;\
 for($i=0;$i -lt $retries;$i++){{\
   try{{\
-    Rename-Item -Path '{current}' -NewName $oldExe -Force;\
+    Move-Item -LiteralPath '{current}' -Destination $oldExe -Force;\
     break;\
   }}catch{{\
     if($i -ge $retries-1){{throw}}\
