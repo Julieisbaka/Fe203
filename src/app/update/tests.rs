@@ -5,7 +5,7 @@ use super::*;
 fn replace_binary_in_place_unix_stages_with_unique_name() {
     use std::os::unix::fs::PermissionsExt;
 
-    let dir = std::path::Path::new("/tmp").join(format!(
+    let dir = std::env::temp_dir().join(format!(
         "fe203-test-replace-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
