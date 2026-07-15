@@ -306,22 +306,44 @@ mod tests {
 
     #[test]
     fn executable_name_check_matches_only_fe203() {
-        assert!(is_fe203_executable(Path::new(r"C:\tools\fe203.exe")));
+        // Unix-style paths work on all platforms.
         assert!(is_fe203_executable(Path::new("/tmp/fe203")));
-        assert!(!is_fe203_executable(Path::new(r"C:\tools\pipeline.exe")));
+        assert!(!is_fe203_executable(Path::new("/usr/local/bin/pipeline")));
+
+        // Windows-style paths are only parsed correctly on Windows.
+        #[cfg(windows)]
+        {
+            assert!(is_fe203_executable(Path::new(r"C:\tools\fe203.exe")));
+            assert!(!is_fe203_executable(Path::new(r"C:\tools\pipeline.exe")));
+        }
     }
 
     #[test]
     fn development_executable_path_is_detected() {
+        // Unix-style paths work on all platforms.
         assert!(is_development_executable_path(Path::new(
-            r"C:\repo\target\debug\fe203.exe"
+            "/home/user/repo/target/debug/fe203"
         )));
         assert!(is_development_executable_path(Path::new(
-            r"C:\repo\target\release\fe203.exe"
+            "/home/user/repo/target/release/fe203"
         )));
         assert!(!is_development_executable_path(Path::new(
-            r"C:\Users\caspe\.cargo\bin\fe203.exe"
+            "/home/user/.cargo/bin/fe203"
         )));
+
+        // Windows-style paths are only parsed correctly on Windows.
+        #[cfg(windows)]
+        {
+            assert!(is_development_executable_path(Path::new(
+                r"C:\repo\target\debug\fe203.exe"
+            )));
+            assert!(is_development_executable_path(Path::new(
+                r"C:\repo\target\release\fe203.exe"
+            )));
+            assert!(!is_development_executable_path(Path::new(
+                r"C:\Users\caspe\.cargo\bin\fe203.exe"
+            )));
+        }
     }
 
     #[test]
