@@ -35,15 +35,15 @@ for($i=0;$i -lt $retries;$i++){{\
     $delay=[Math]::Min($delay*2,2000);\
   }}\
 }};\
-try{{\
-  Copy-Item -Path '{replacement}' -Destination '{current}' -Force;\
-  Remove-Item -Path $oldExe -Force -ErrorAction SilentlyContinue;\
+    try{{\
+  Copy-Item -LiteralPath '{replacement}' -Destination '{current}' -Force;\
   & '{current}' --version;\
+  Remove-Item -Path $oldExe -Force -ErrorAction SilentlyContinue;\
   Remove-Item -Path '{temp_dir}' -Recurse -Force -ErrorAction SilentlyContinue;\
 }}catch{{\
   $null=Move-Item -LiteralPath $oldExe -Destination '{current}' -Force -ErrorAction SilentlyContinue;\
   throw;\
-}};",
+}};
         pid = pid,
         replacement = ps_single_quote_escape(&replacement_binary.to_string_lossy()),
         current = ps_single_quote_escape(&current_exe.to_string_lossy()),
