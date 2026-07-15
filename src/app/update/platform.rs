@@ -12,10 +12,11 @@ pub(super) fn schedule_windows_replace_and_launch(
     version_text: &str,
 ) -> Result<(), String> {
     let pid = std::process::id();
-    // Wait for the current process to exit, then retry Copy-Item with backoff to
-    // handle brief post-exit file locks (e.g., from antivirus scanners). Rename
-    // the old binary out of the way before copying so a locked destination does
-    // not prevent the new binary from landing at the original path.
+    // Wait for the current process to exit, then retry renaming the old binary
+    // with exponential backoff to handle brief post-exit file locks (e.g., from
+    // antivirus scanners). Rename the old binary out of the way before copying so
+    // a locked destination does not prevent the new binary from landing at the
+    // original path.
     let script = format!(
         "$ErrorActionPreference='Stop';\
 $pidToWait={pid};\
@@ -23,13 +24,15 @@ while(Get-Process -Id $pidToWait -ErrorAction SilentlyContinue){{Start-Sleep -Mi
 $oldExe='{current}'+'.old';\
 $null=Remove-Item -Path $oldExe -Force -ErrorAction SilentlyContinue;\
 $retries=10;\
+$delay=200;\
 for($i=0;$i -lt $retries;$i++){{\
   try{{\
     Move-Item -LiteralPath '{current}' -Destination $oldExe -Force;\
     break;\
   }}catch{{\
-    if($i -ge $retries-1){{throw}}\
-    Start-Sleep -Milliseconds 500;\
+    if($i -ge $retries-1){{Write-Error \"fe203 self-update: failed to rename current binary after $retries attempts: $_\";throw}}\
+    Start-Sleep -Milliseconds $delay;\
+    $delay=[Math]::Min($delay*2,2000);\
   }}\
 }};\
 try{{\
