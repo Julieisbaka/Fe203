@@ -117,7 +117,10 @@ fn make_temp_update_dir() -> Result<PathBuf, String> {
         .duration_since(UNIX_EPOCH)
         .map_err(|err| format!("system clock error: {err}"))?
         .as_nanos();
-    let tmp = std::env::temp_dir().join(format!("fe203-update-{}-{nanos}", std::process::id()));
+    let base = std::env::temp_dir()
+        .canonicalize()
+        .map_err(|err| format!("cannot resolve temp directory: {err}"))?;
+    let tmp = base.join(format!("fe203-update-{}-{nanos}", std::process::id()));
     std::fs::create_dir_all(&tmp).map_err(|err| format!("failed to create temp dir: {err}"))?;
     Ok(tmp)
 }
