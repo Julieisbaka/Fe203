@@ -117,11 +117,18 @@ fn make_temp_update_dir() -> Result<PathBuf, String> {
         .duration_since(UNIX_EPOCH)
         .map_err(|err| format!("system clock error: {err}"))?
         .as_nanos();
-    let base = std::env::temp_dir()
-        .canonicalize()
-        .map_err(|err| format!("cannot resolve temp directory: {err}"))?;
+    let base = std::env::temp_dir();
+    if base
+        .components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
+        return Err(format!(
+            "temp directory contains parent traversal component: {}",
+            base.display()
+        ));
+    }
     let tmp = base.join(format!("fe203-update-{}-{nanos}", std::process::id()));
-    std::fs::create_dir_all(&tmp).map_err(|err| format!("failed to create temp dir: {err}"))?;
+    std::fs::create_dir(&tmp).map_err(|err| format!("failed to create temp dir: {err}"))?;
     Ok(tmp)
 }
 
