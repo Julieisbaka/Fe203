@@ -118,6 +118,11 @@ fn make_temp_update_dir() -> Result<PathBuf, String> {
         .map_err(|err| format!("system clock error: {err}"))?
         .as_nanos();
     let base = std::env::temp_dir();
+    let base = std::fs::canonicalize(&base)
+        .map_err(|err| format!("failed to resolve temp dir '{}': {err}", base.display()))?;
+    if !base.is_absolute() {
+        return Err(format!("temp directory is not absolute: {}", base.display()));
+    }
     if base
         .components()
         .any(|c| matches!(c, std::path::Component::ParentDir))
