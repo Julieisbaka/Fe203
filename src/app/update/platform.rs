@@ -43,7 +43,7 @@ for($i=0;$i -lt $retries;$i++){{\
 }}catch{{\
   $null=Move-Item -LiteralPath $oldExe -Destination '{current}' -Force -ErrorAction SilentlyContinue;\
   throw;\
-}};
+}};",
         pid = pid,
         replacement = ps_single_quote_escape(&replacement_binary.to_string_lossy()),
         current = ps_single_quote_escape(&current_exe.to_string_lossy()),
