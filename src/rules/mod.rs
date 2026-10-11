@@ -409,13 +409,29 @@ pub(crate) fn count_identifier_uses(content: &str, name: &str) -> Vec<usize> {
                 }
             }
             b'"' => {
-                index = skip_string_literal(bytes, index + 1, b'"');
+                let end = skip_string_literal(bytes, index + 1, b'"');
+                if is_format_macro_before(content, index) {
+                    out.extend(format_capture_uses(content, index + 1, end, needle));
+                }
+                index = end;
             }
             b'\'' => {
-                index = skip_char_literal(bytes, index + 1);
+                if let Some(end) = skip_char_literal(bytes, index) {
+                    index = end;
+                } else {
+                    index += 1;
+                }
             }
             b'r' => {
                 if let Some(end) = skip_raw_string_literal(bytes, index) {
+                    if is_format_macro_before(content, index) {
+                        let start = index + 1 + bytes[index + 1..]
+                            .iter()
+                            .take_while(|byte| **byte == b'#')
+                            .count()
+                            + 1;
+                        out.extend(format_capture_uses(content, start, end, needle));
+                    }
                     index = end;
                 } else if is_ident_start(bytes[index]) {
                     let start = index;
@@ -462,17 +478,101 @@ fn skip_string_literal(bytes: &[u8], mut index: usize, terminator: u8) -> usize 
     index
 }
 
-fn skip_char_literal(bytes: &[u8], mut index: usize) -> usize {
-    while index < bytes.len() {
-        if bytes[index] == b'\\' {
-            index += 2;
-        } else if bytes[index] == b'\'' {
-            return index + 1;
-        } else {
-            index += 1;
-        }
+pub(crate) fn skip_char_literal(bytes: &[u8], quote: usize) -> Option<usize> {
+    if bytes.get(quote) != Some(&b'\'') {
+        return None;
     }
-    index
+
+    let first = quote + 1;
+    let next = *bytes.get(first)?;
+    let end = if next == b'\\' {
+        match *bytes.get(first + 1)? {
+            b'u' if bytes.get(first + 2) == Some(&b'{') => {
+                let close = bytes[first + 3..].iter().position(|byte| *byte == b'}')?;
+                first + 3 + close + 1
+            }
+            b'x' => first + 4,
+            _ => first + 2,
+        }
+    } else {
+        first + utf8_char_width(next)
+    };
+
+    (bytes.get(end) == Some(&b'\'')).then_some(end + 1)
+}
+
+fn utf8_char_width(first: u8) -> usize {
+    match first {
+        0x00..=0x7f => 1,
+        0xc2..=0xdf => 2,
+        0xe0..=0xef => 3,
+        0xf0..=0xf4 => 4,
+        _ => 1,
+    }
+}
+
+fn is_format_macro_before(content: &str, literal_start: usize) -> bool {
+    const FORMAT_MACROS: &[&str] = &[
+        "format",
+        "format_args",
+        "println",
+        "print",
+        "eprintln",
+        "eprint",
+        "write",
+        "writeln",
+        "panic",
+        "debug",
+        "info",
+        "warn",
+        "error",
+        "trace",
+    ];
+
+    let prefix = content[..literal_start].trim_end();
+    let Some(prefix) = prefix.strip_suffix('(') else {
+        return false;
+    };
+    let prefix = prefix.trim_end();
+    let macro_start = prefix
+        .rfind(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
+        .map_or(0, |index| index + 1);
+    let macro_name = prefix[macro_start..].strip_suffix('!').unwrap_or("");
+    let macro_name = macro_name
+        .rsplit("::")
+        .next()
+        .unwrap_or(macro_name);
+    FORMAT_MACROS.contains(&macro_name)
+}
+
+fn format_capture_uses(content: &str, start: usize, end: usize, needle: &[u8]) -> Vec<usize> {
+    let bytes = content.as_bytes();
+    let mut out = Vec::new();
+    let mut index = start;
+    while index < end {
+        if bytes[index] != b'{' {
+            index += 1;
+            continue;
+        }
+        if bytes.get(index + 1) == Some(&b'{') {
+            index += 2;
+            continue;
+        }
+
+        let capture_start = index + 1;
+        let mut capture_end = capture_start;
+        while capture_end < end && is_ident_continue(bytes[capture_end]) {
+            capture_end += 1;
+        }
+        if capture_end > capture_start
+            && &bytes[capture_start..capture_end] == needle
+            && matches!(bytes.get(capture_end), Some(b'}' | b':' | b'.' | b'!'))
+        {
+            out.push(capture_start);
+        }
+        index = capture_end.max(index + 1);
+    }
+    out
 }
 
 fn skip_raw_string_literal(bytes: &[u8], index: usize) -> Option<usize> {
