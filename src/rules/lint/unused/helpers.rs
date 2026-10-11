@@ -1,5 +1,7 @@
 use crate::finding::Finding;
-use crate::rules::{count_identifier_uses, is_rule_ignored, FileContext, Rule};
+use crate::rules::{
+    count_identifier_uses, is_rule_ignored, skip_char_literal, FileContext, Rule,
+};
 
 pub(super) struct Declaration {
     pub(super) name: String,
@@ -65,6 +67,8 @@ pub(super) fn parse_let_bindings(statement: &str) -> Vec<(String, usize)> {
     }
     let binding_end = rest.find('=').unwrap_or(rest.len());
     let pattern = rest[..binding_end].trim_end();
+    let pattern_end = find_type_ascription(pattern).unwrap_or(pattern.len());
+    let pattern = pattern[..pattern_end].trim_end();
 
     if pattern.contains(['(', '{', '[', ',']) {
         return parse_pattern_bindings(pattern, offset);
@@ -121,6 +125,9 @@ fn parse_pattern_bindings(pattern: &str, base_offset: usize) -> Vec<(String, usi
         {
             continue;
         }
+        if pattern[..start].ends_with("::") {
+            continue;
+        }
         if matches!(next, Some(':')) {
             continue;
         }
@@ -134,6 +141,47 @@ fn parse_pattern_bindings(pattern: &str, base_offset: usize) -> Vec<(String, usi
     }
 
     out
+}
+
+fn find_type_ascription(pattern: &str) -> Option<usize> {
+    let bytes = pattern.as_bytes();
+    let mut idx = 0usize;
+    let mut paren_depth = 0usize;
+    let mut bracket_depth = 0usize;
+    let mut brace_depth = 0usize;
+
+    while idx < bytes.len() {
+        if bytes[idx] == b'"' {
+            idx = skip_string_literal(bytes, idx + 1, b'"');
+            continue;
+        }
+        if bytes[idx] == b'\'' {
+            if let Some(end) = skip_char_literal(bytes, idx) {
+                idx = end;
+                continue;
+            }
+        }
+        match bytes[idx] {
+            b'(' => paren_depth += 1,
+            b')' => paren_depth = paren_depth.saturating_sub(1),
+            b'[' => bracket_depth += 1,
+            b']' => bracket_depth = bracket_depth.saturating_sub(1),
+            b'{' => brace_depth += 1,
+            b'}' => brace_depth = brace_depth.saturating_sub(1),
+            b':'
+                if paren_depth == 0
+                    && bracket_depth == 0
+                    && brace_depth == 0
+                    && bytes.get(idx + 1) != Some(&b':')
+                    && (idx == 0 || bytes[idx - 1] != b':') =>
+            {
+                return Some(idx);
+            }
+            _ => {}
+        }
+        idx += 1;
+    }
+    None
 }
 
 pub(super) fn parse_const_bindings(statement: &str) -> Vec<(String, usize)> {
@@ -227,6 +275,7 @@ pub(super) fn scan_unused_bindings(
 
 fn collect_binding_statements(content: &str) -> Vec<Statement> {
     let line_starts = build_line_starts(content);
+    let code = rust_code_mask(content);
     let mut out = Vec::new();
 
     for start in line_starts {
@@ -244,6 +293,9 @@ fn collect_binding_statements(content: &str) -> Vec<Statement> {
         }
         let offset = line.len() - trimmed.len();
         let statement_start = start + offset;
+        if !code.get(statement_start).copied().unwrap_or(false) {
+            continue;
+        }
         let statement_end = find_statement_end(content, statement_start);
         out.push(Statement {
             start: statement_start,
@@ -253,6 +305,39 @@ fn collect_binding_statements(content: &str) -> Vec<Statement> {
     }
 
     out
+}
+
+fn rust_code_mask(content: &str) -> Vec<bool> {
+    let bytes = content.as_bytes();
+    let mut code = vec![true; bytes.len()];
+    let mut idx = 0usize;
+
+    while idx < bytes.len() {
+        let end = match bytes[idx] {
+            b'/' if bytes.get(idx + 1) == Some(&b'/') => {
+                let end = bytes[idx..]
+                    .iter()
+                    .position(|byte| *byte == b'\n')
+                    .map_or(bytes.len(), |offset| idx + offset);
+                Some(end)
+            }
+            b'/' if bytes.get(idx + 1) == Some(&b'*') => {
+                Some(skip_block_comment(bytes, idx + 2))
+            }
+            b'"' => Some(skip_string_literal(bytes, idx + 1, b'"')),
+            b'\'' => skip_char_literal(bytes, idx),
+            b'r' => skip_raw_string_literal(bytes, idx),
+            _ => None,
+        };
+
+        if let Some(end) = end {
+            code[idx..end].fill(false);
+            idx = end;
+        } else {
+            idx += 1;
+        }
+    }
+    code
 }
 
 fn build_line_starts(content: &str) -> Vec<usize> {
@@ -308,8 +393,10 @@ fn lexical_scope_end(content: &str, start: usize) -> usize {
             continue;
         }
         if bytes[idx] == b'\'' {
-            idx = skip_char_literal(bytes, idx + 1);
-            continue;
+            if let Some(end) = skip_char_literal(bytes, idx) {
+                idx = end;
+                continue;
+            }
         }
         if bytes[idx] == b'r' {
             if let Some(end) = skip_raw_string_literal(bytes, idx) {
@@ -356,8 +443,10 @@ fn brace_depth_before(content: &str, end: usize) -> usize {
             continue;
         }
         if bytes[idx] == b'\'' {
-            idx = skip_char_literal(bytes, idx + 1).min(end);
-            continue;
+            if let Some(char_end) = skip_char_literal(bytes, idx) {
+                idx = char_end.min(end);
+                continue;
+            }
         }
         if bytes[idx] == b'r' {
             if let Some(raw_end) = skip_raw_string_literal(bytes, idx) {
@@ -401,8 +490,10 @@ fn find_statement_end(content: &str, start: usize) -> usize {
             continue;
         }
         if bytes[idx] == b'\'' {
-            idx = skip_char_literal(bytes, idx + 1);
-            continue;
+            if let Some(end) = skip_char_literal(bytes, idx) {
+                idx = end;
+                continue;
+            }
         }
         if bytes[idx] == b'r' {
             if let Some(raw_end) = skip_raw_string_literal(bytes, idx) {
@@ -440,10 +531,6 @@ fn skip_string_literal(bytes: &[u8], mut index: usize, terminator: u8) -> usize 
         }
     }
     bytes.len()
-}
-
-fn skip_char_literal(bytes: &[u8], index: usize) -> usize {
-    skip_string_literal(bytes, index, b'\'')
 }
 
 fn skip_raw_string_literal(bytes: &[u8], index: usize) -> Option<usize> {
