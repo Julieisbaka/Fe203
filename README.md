@@ -64,7 +64,7 @@ fe203 --check-syntax # runs cargo check; unsafe on untrusted repos
 fe203 --max          # runs cargo check + cargo test + all rules; unsafe on untrusted repos
 fe203 --list-rules   # print the built-in rule index
 fe203 --check-update # check GitHub Releases for a newer version
-fe203 --self-update  # update from latest release binary (Windows x86_64)
+fe203 --self-update  # install the latest supported release binary
 ```
 
 `--check-syntax` and `--max` invoke Cargo on the target project. Do not use
