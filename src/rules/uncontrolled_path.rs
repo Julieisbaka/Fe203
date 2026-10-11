@@ -54,7 +54,8 @@ impl Rule for UncontrolledPathRule {
 
         for chain in collect_method_chains(ctx.content) {
             for call in chain.calls {
-                if matches!(call.name, "join" | "push")
+                if (call.name == "join"
+                    || (call.name == "push" && is_path_receiver(ctx.content, chain.root)))
                     && is_controlled(call.args, &tainted)
                     && !is_validated(call.args)
                 {
@@ -99,6 +100,33 @@ impl Rule for UncontrolledPathRule {
         }
         findings
     }
+}
+
+fn is_path_receiver(content: &str, receiver: &str) -> bool {
+    if receiver.contains("PathBuf")
+        || receiver.contains("Path::")
+        || receiver.contains("std::path::Path")
+    {
+        return true;
+    }
+
+    let receiver = receiver.trim().trim_start_matches('&').trim();
+    if receiver.is_empty()
+        || !receiver
+            .bytes()
+            .all(|byte| byte == b'_' || byte.is_ascii_alphanumeric())
+    {
+        return false;
+    }
+
+    content.lines().any(|line| {
+        let line = line.trim();
+        line.starts_with("let ")
+            && line.contains(receiver)
+            && line.contains("PathBuf")
+            || line.contains(&format!("{receiver}: &Path"))
+            || line.contains(&format!("{receiver}: &mut Path"))
+    })
 }
 
 fn add_finding(
@@ -173,5 +201,18 @@ mod tests {
         ))
         .is_empty());
         assert!(scan("// fe203-ignore FE125\nlet path = root.join(user_input);\n").is_empty());
+    }
+
+    #[test]
+    fn only_treats_push_as_a_path_sink_for_path_receivers() {
+        assert!(scan(
+            "fn collect(user_input: &str) { let mut values = Vec::new(); values.push(user_input); }\n"
+        )
+        .is_empty());
+        let findings = scan(
+            "fn extend(path: &mut PathBuf, user_input: &str) { path.push(user_input); }\n",
+        );
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule_id, "FE125");
     }
 }
