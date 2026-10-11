@@ -63,7 +63,13 @@ impl Rule for IgnoredFilesystemErrorRule {
                 let function = invocation.path.rsplit("::").next()?;
                 if invocation.kind != InvocationKind::Call
                     || !FALLIBLE_FILESYSTEM_CALLS.contains(&function)
-                    || is_rule_ignored(ctx, invocation.line_no, self.id(), self.name(), self.category())
+                    || is_rule_ignored(
+                        ctx,
+                        invocation.line_no,
+                        self.id(),
+                        self.name(),
+                        self.category(),
+                    )
                 {
                     return None;
                 }
@@ -75,9 +81,9 @@ impl Rule for IgnoredFilesystemErrorRule {
                     return None;
                 }
                 let before_call = line.get(..invocation.column.saturating_sub(1))?;
-                let ignored_binding = before_call.rfind("let _").is_some_and(|binding| {
-                    before_call[binding + "let _".len()..].trim() == "="
-                });
+                let ignored_binding = before_call
+                    .rfind("let _")
+                    .is_some_and(|binding| before_call[binding + "let _".len()..].trim() == "=");
                 ignored_binding.then(|| {
                     self.finding(
                         ctx,

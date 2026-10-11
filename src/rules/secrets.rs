@@ -307,7 +307,13 @@ impl Rule for WeakHashRule {
                     || !MARKERS
                         .iter()
                         .any(|marker| invocation.path.ends_with(marker))
-                    || is_rule_ignored(ctx, invocation.line_no, self.id(), self.name(), self.category())
+                    || is_rule_ignored(
+                        ctx,
+                        invocation.line_no,
+                        self.id(),
+                        self.name(),
+                        self.category(),
+                    )
                 {
                     return None;
                 }

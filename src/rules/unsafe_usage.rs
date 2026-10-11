@@ -172,8 +172,13 @@ impl Rule for RiskyApiRule {
                 if invocation.kind != InvocationKind::Call || !self.api_names.contains(&api) {
                     return None;
                 }
-                if is_rule_ignored(ctx, invocation.line_no, self.id(), self.name(), self.category())
-                {
+                if is_rule_ignored(
+                    ctx,
+                    invocation.line_no,
+                    self.id(),
+                    self.name(),
+                    self.category(),
+                ) {
                     return None;
                 }
                 let line = lines
