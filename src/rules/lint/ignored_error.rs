@@ -3,12 +3,12 @@ use crate::rules::syntax::{collect_invocations, InvocationKind};
 use crate::rules::{is_comment_line, is_rule_ignored, FileContext, Rule};
 
 const FALLIBLE_FILESYSTEM_CALLS: &[&str] = &[
-    "remove_file",
-    "remove_dir",
-    "rename",
-    "write",
-    "create_dir",
-    "create_dir_all",
+    "fs::remove_file",
+    "fs::remove_dir",
+    "fs::rename",
+    "fs::write",
+    "fs::create_dir",
+    "fs::create_dir_all",
 ];
 
 pub struct IgnoredFilesystemErrorRule;
@@ -60,9 +60,10 @@ impl Rule for IgnoredFilesystemErrorRule {
         collect_invocations(ctx.content)
             .into_iter()
             .filter_map(|invocation| {
-                let function = invocation.path.rsplit("::").next()?;
                 if invocation.kind != InvocationKind::Call
-                    || !FALLIBLE_FILESYSTEM_CALLS.contains(&function)
+                    || !FALLIBLE_FILESYSTEM_CALLS
+                        .iter()
+                        .any(|path| invocation.path.ends_with(path))
                     || is_rule_ignored(
                         ctx,
                         invocation.line_no,
@@ -114,6 +115,8 @@ mod tests {
             "let _ = std::fs::remove_file(path);\n",
             "let _result = std::fs::remove_file(path);\n",
             "let result = std::fs::remove_file(path);\n",
+            "let _ = custom::write(path);\n",
+            "let _ = \"std::fs::remove_file(path)\";\n",
         ));
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule_id, "FE067");

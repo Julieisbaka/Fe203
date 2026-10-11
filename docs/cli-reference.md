@@ -175,7 +175,8 @@ Checks the latest GitHub Release and compares it to the current CLI version.
 - Prints `update available: <current> -> <latest>` when a newer version exists
 - Prints `fe203 is up to date (<current>)` when no newer release is found
 
-Added in `0.2.1`.
+Added in `0.2.1`; changed in `0.3.0` to verify the downloaded version and exit
+without restarting the original command.
 
 ## `--self-update`
 
