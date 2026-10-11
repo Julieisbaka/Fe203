@@ -30,6 +30,8 @@ never reused, even if a rule is removed.
 - [regex.md](regex.md) — `regex`
 - [shell.md](shell.md) — `shell`
 - [path.md](path.md) — `path`
+- Async/concurrency — `async`
+- Performance — `performance`
 
 ## Adding a New Rule
 

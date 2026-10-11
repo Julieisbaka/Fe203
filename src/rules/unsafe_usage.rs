@@ -1,5 +1,5 @@
 //! Unsafe-usage rules: unsafe syntax and APIs with strong safety obligations.
-// fe203-ignore-file FE020, FE022, FE023, FE024
+// fe203-ignore-file FE020, FE022, FE023, FE024, FE025, FE026, FE027
 
 use crate::finding::{Category, Finding, Severity};
 use crate::rules::syntax::{collect_invocations, InvocationKind};
@@ -226,7 +226,222 @@ pub fn rules() -> Vec<Box<dyn Rule>> {
             api_names: &["zeroed"],
             suggestion: "Use `Default`, `MaybeUninit`, or a type-specific constructor that preserves invariants.",
         }),
+        Box::new(StaticMutRule),
+        Box::new(RawPointerDerefRule),
+        Box::new(UnsafeWithoutSafetyCommentRule),
     ]
+}
+
+struct StaticMutRule;
+
+impl Rule for StaticMutRule {
+    fn id(&self) -> &'static str {
+        "FE025"
+    }
+
+    fn name(&self) -> &'static str {
+        "static-mut"
+    }
+
+    fn description(&self) -> &'static str {
+        "`static mut` introduces global mutable state and synchronization obligations"
+    }
+
+    fn category(&self) -> Category {
+        Category::Unsafe
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Warning
+    }
+
+    fn suggestion(&self) -> Option<&'static str> {
+        Some("Prefer atomics, a lock-protected static, or owned state passed explicitly.")
+    }
+
+    fn prefilter_signatures(&self) -> &'static [&'static str] {
+        &["static mut"]
+    }
+
+    fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
+        ctx.lines()
+            .filter_map(|(line_no, line)| {
+                let start = line.find("static mut ")?;
+                if is_comment_line(line)
+                    || is_rule_ignored(ctx, line_no, self.id(), self.name(), self.category())
+                {
+                    return None;
+                }
+                Some(self.finding(
+                    ctx,
+                    line_no,
+                    start + 1,
+                    "`static mut` declaration found".to_string(),
+                    line,
+                ))
+            })
+            .collect()
+    }
+}
+
+struct RawPointerDerefRule;
+
+impl Rule for RawPointerDerefRule {
+    fn id(&self) -> &'static str {
+        "FE026"
+    }
+
+    fn name(&self) -> &'static str {
+        "raw-pointer-dereference"
+    }
+
+    fn description(&self) -> &'static str {
+        "dereferencing a raw pointer requires validity and lifetime invariants"
+    }
+
+    fn category(&self) -> Category {
+        Category::Unsafe
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Warning
+    }
+
+    fn suggestion(&self) -> Option<&'static str> {
+        Some("Encapsulate the dereference in a small unsafe block with documented safety invariants.")
+    }
+
+    fn prefilter_signatures(&self) -> &'static [&'static str] {
+        &["*const", "*mut"]
+    }
+
+    fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
+        let mut pointer_names = Vec::new();
+        for line in ctx.content.lines() {
+            for declaration in ["*const ", "*mut "] {
+                let mut cursor = 0;
+                while let Some(index) = line[cursor..].find(declaration) {
+                    let after_type = cursor + index + declaration.len();
+                    let name = line[..cursor + index]
+                        .split(|ch: char| !(ch == '_' || ch.is_ascii_alphanumeric()))
+                        .filter(|part| !part.is_empty())
+                        .next_back()
+                        .unwrap_or("");
+                    if is_identifier(name) && after_type < line.len() {
+                        pointer_names.push(name.to_string());
+                    }
+                    cursor = after_type;
+                }
+            }
+        }
+        let mut findings = Vec::new();
+        for (line_no, line) in ctx.lines() {
+            if is_comment_line(line)
+                || is_rule_ignored(ctx, line_no, self.id(), self.name(), self.category())
+            {
+                continue;
+            }
+            for name in &pointer_names {
+                let pattern = format!("*{name}");
+                let mut cursor = 0;
+                while let Some(index) = line[cursor..].find(&pattern) {
+                    let at = cursor + index;
+                    let after = at + pattern.len();
+                    if at == 0 || line.as_bytes()[at - 1] != b'&' {
+                        let follows_ident = line[after..]
+                            .chars()
+                            .next()
+                            .is_some_and(|ch| ch == '_' || ch.is_ascii_alphanumeric());
+                        if !follows_ident {
+                            findings.push(self.finding(
+                                ctx,
+                                line_no,
+                                at + 1,
+                                format!("raw pointer `{name}` is dereferenced"),
+                                line,
+                            ));
+                        }
+                    }
+                    cursor = after;
+                }
+            }
+        }
+        findings
+    }
+}
+
+struct UnsafeWithoutSafetyCommentRule;
+
+impl Rule for UnsafeWithoutSafetyCommentRule {
+    fn id(&self) -> &'static str {
+        "FE027"
+    }
+
+    fn name(&self) -> &'static str {
+        "unsafe-without-safety-comment"
+    }
+
+    fn description(&self) -> &'static str {
+        "unsafe blocks should document the invariants that make them sound"
+    }
+
+    fn category(&self) -> Category {
+        Category::Unsafe
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Warning
+    }
+
+    fn suggestion(&self) -> Option<&'static str> {
+        Some("Add a nearby `// SAFETY:` comment explaining why the operation's invariants hold.")
+    }
+
+    fn prefilter_signatures(&self) -> &'static [&'static str] {
+        &["unsafe"]
+    }
+
+    fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
+        let lines: Vec<_> = ctx.lines().collect();
+        lines
+            .iter()
+            .enumerate()
+            .filter_map(|(index, (line_no, line))| {
+                let unsafe_idx = word_occurrences(line, "unsafe")
+                    .into_iter()
+                    .find(|idx| line[*idx + "unsafe".len()..].trim_start().starts_with('{'))?;
+                if is_rule_ignored(ctx, *line_no, self.id(), self.name(), self.category()) {
+                    return None;
+                }
+                let previous = index.checked_sub(1).and_then(|i| lines.get(i));
+                let documented = line.contains("SAFETY:")
+                    || previous.is_some_and(|(_, text)| {
+                        text.trim_start().starts_with("//") && text.contains("SAFETY:")
+                    });
+                if documented {
+                    return None;
+                }
+                Some(self.finding(
+                    ctx,
+                    *line_no,
+                    unsafe_idx + 1,
+                    "unsafe block has no adjacent `SAFETY:` explanation".to_string(),
+                    line,
+                ))
+            })
+            .collect()
+    }
+}
+
+fn is_identifier(input: &str) -> bool {
+    !input.is_empty()
+        && input
+            .bytes()
+            .all(|byte| byte == b'_' || byte.is_ascii_alphanumeric())
+        && input
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte == b'_' || byte.is_ascii_alphabetic())
 }
 
 #[cfg(test)]
@@ -242,9 +457,9 @@ mod tests {
     #[test]
     fn detects_unsafe_block() {
         let findings = scan_all("fn f() {\n    unsafe { do_thing() }\n}\n");
-        assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].rule_id, "FE020");
-        assert_eq!(findings[0].line, 2);
+        let ids: Vec<&str> = findings.iter().map(|finding| finding.rule_id).collect();
+        assert_eq!(ids, ["FE020", "FE027"]);
+        assert!(findings.iter().all(|finding| finding.line == 2));
     }
 
     #[test]
@@ -264,7 +479,7 @@ mod tests {
 
     #[test]
     fn respects_ignore_comments() {
-        let findings = scan_all("// fe203-ignore FE020\nunsafe { do_thing() }\n");
+        let findings = scan_all("// fe203-ignore FE020, FE027\nunsafe { do_thing() }\n");
         assert!(findings.is_empty());
     }
 
@@ -278,5 +493,24 @@ mod tests {
         ));
         let ids: Vec<&str> = findings.iter().map(|finding| finding.rule_id).collect();
         assert_eq!(ids, ["FE022", "FE023", "FE024"]);
+    }
+
+    #[test]
+    fn detects_static_mut_raw_pointer_and_undocumented_unsafe_block() {
+        let content = concat!(
+            "static mut COUNT: usize = 0;\n",
+            "unsafe fn read(ptr: *const u32) -> u32 {\n",
+            "    unsafe { *ptr }\n",
+            "}\n",
+            "unsafe fn documented(ptr: *const u32) -> u32 {\n",
+            "    // SAFETY: caller guarantees the pointer is valid.\n",
+            "    unsafe { *ptr }\n",
+            "}\n",
+        );
+        let findings = scan_all(content);
+        let ids: Vec<&str> = findings.iter().map(|finding| finding.rule_id).collect();
+        assert!(ids.contains(&"FE025"));
+        assert!(ids.contains(&"FE026"));
+        assert_eq!(ids.iter().filter(|id| **id == "FE027").count(), 1);
     }
 }

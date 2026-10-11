@@ -1,10 +1,10 @@
 //! Path-safety rules: literal traversal segments and untrusted-looking
 //! path joins.
-// fe203-ignore-file FE120, FE121, FE122
+// fe203-ignore-file FE120, FE121, FE122, FE123, FE124
 
 use crate::finding::{Category, Finding, Severity};
-use crate::rules::syntax::collect_method_chains;
-use crate::rules::{is_rule_ignored, FileContext, Rule};
+use crate::rules::syntax::{collect_invocations, collect_method_chains, InvocationKind};
+use crate::rules::{is_comment_line, is_rule_ignored, word_occurrences, FileContext, Rule};
 
 const JOIN_CALLS: &[&str] = &[".join(", ".push("];
 const UNTRUSTED_KEYWORDS: &[&str] = &[
@@ -278,7 +278,156 @@ pub fn rules() -> Vec<Box<dyn Rule>> {
         Box::new(PathTraversalLiteralRule),
         Box::new(UnsanitizedPathInputRule),
         Box::new(ArchiveEntryTraversalRule),
+        Box::new(AbsolutePathJoinRule),
+        Box::new(LossyPathConversionRule),
     ]
+}
+
+struct AbsolutePathJoinRule;
+
+impl Rule for AbsolutePathJoinRule {
+    fn id(&self) -> &'static str {
+        "FE123"
+    }
+
+    fn name(&self) -> &'static str {
+        "absolute-path-join"
+    }
+
+    fn description(&self) -> &'static str {
+        "an absolute path passed to join can replace the intended base directory"
+    }
+
+    fn category(&self) -> Category {
+        Category::Path
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Warning
+    }
+
+    fn suggestion(&self) -> Option<&'static str> {
+        Some("Reject absolute input or convert it to a validated relative path before joining.")
+    }
+
+    fn prefilter_signatures(&self) -> &'static [&'static str] {
+        &[".join(", "is_absolute"]
+    }
+
+    fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
+        let lines: Vec<_> = ctx.lines().collect();
+        collect_method_chains(ctx.content)
+            .into_iter()
+            .flat_map(|chain| {
+                chain.calls.into_iter().filter_map(|call| {
+                    if call.name != "join"
+                        || !is_absolute_path_argument(call.args)
+                        || is_rule_ignored(
+                            ctx,
+                            call.line_no,
+                            self.id(),
+                            self.name(),
+                            self.category(),
+                        )
+                    {
+                        return None;
+                    }
+                    let line = lines
+                        .iter()
+                        .find(|(line_no, _)| *line_no == call.line_no)
+                        .map(|(_, line)| *line)?;
+                    Some(self.finding(
+                        ctx,
+                        call.line_no,
+                        call.column,
+                        "absolute path passed to `.join()` may replace the base path".to_string(),
+                        line,
+                    ))
+                })
+            })
+            .collect()
+    }
+}
+
+struct LossyPathConversionRule;
+
+impl Rule for LossyPathConversionRule {
+    fn id(&self) -> &'static str {
+        "FE124"
+    }
+
+    fn name(&self) -> &'static str {
+        "lossy-path-conversion"
+    }
+
+    fn description(&self) -> &'static str {
+        "lossy path and UTF-8 conversions replace invalid bytes instead of preserving them"
+    }
+
+    fn category(&self) -> Category {
+        Category::Path
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Info
+    }
+
+    fn suggestion(&self) -> Option<&'static str> {
+        Some("Keep the `OsStr`/`OsString` value or handle UTF-8 conversion failure explicitly.")
+    }
+
+    fn prefilter_signatures(&self) -> &'static [&'static str] {
+        &["to_string_lossy", "from_utf8_lossy"]
+    }
+
+    fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
+        let lines: Vec<_> = ctx.lines().collect();
+        lines
+            .iter()
+            .flat_map(|(line_no, line)| {
+                let mut findings = Vec::new();
+                if is_comment_line(line)
+                    || is_rule_ignored(ctx, *line_no, self.id(), self.name(), self.category())
+                {
+                    return findings;
+                }
+                for method in ["to_string_lossy", "from_utf8_lossy"] {
+                    for offset in word_occurrences(line, method) {
+                        if !line[offset + method.len()..].trim_start().starts_with('(') {
+                            continue;
+                        }
+                        findings.push(self.finding(
+                            ctx,
+                            *line_no,
+                            offset + 1,
+                            format!("lossy conversion `{method}` may discard data"),
+                            line,
+                        ));
+                    }
+                }
+                findings
+            })
+            .collect()
+    }
+}
+
+fn is_absolute_path_argument(argument: &str) -> bool {
+    let trimmed = argument.trim();
+    let literal = trimmed
+        .strip_prefix('"')
+        .and_then(|rest| rest.strip_suffix('"'))
+        .or_else(|| {
+            trimmed
+                .strip_prefix("r\"")
+                .and_then(|rest| rest.strip_suffix('"'))
+        });
+    if let Some(path) = literal {
+        return path.starts_with('/')
+            || path.starts_with('\\')
+            || (path.as_bytes().get(1) == Some(&b':') && path.as_bytes()[0].is_ascii_alphabetic());
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    lower.ends_with("_absolute_path") || lower == "absolute_path"
 }
 
 fn extraction_context(lines: &[(usize, &str)], idx: usize) -> String {
@@ -484,5 +633,17 @@ mod tests {
             "fn extract_archive(entry_name: &str) {\n    let out = dest.join(entry_name);\n    let canonical_out = out.canonicalize().unwrap();\n    if !canonical_out.starts_with(dest.as_path()) {\n        return;\n    }\n}\n",
         );
         assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn detects_absolute_joins_and_lossy_conversions() {
+        let findings = scan_all(concat!(
+            "let path = base.join(\"/etc/passwd\");\n",
+            "let text = path.to_string_lossy();\n",
+            "let bytes = String::from_utf8_lossy(input);\n",
+            "let relative = base.join(\"child\");\n",
+        ));
+        let ids: Vec<&str> = findings.iter().map(|finding| finding.rule_id).collect();
+        assert_eq!(ids, ["FE123", "FE124", "FE124"]);
     }
 }

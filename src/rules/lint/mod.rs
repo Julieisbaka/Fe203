@@ -8,6 +8,7 @@ mod fallible;
 mod ignored_error;
 mod ignored_result;
 pub(crate) mod suppressions;
+mod test_quality;
 mod test_reference;
 mod unused;
 
@@ -17,6 +18,7 @@ use comments::{EmptyCommentRule, EmptyDocCommentRule};
 use ignored_error::IgnoredFilesystemErrorRule;
 use ignored_result::IgnoredProductResultRule;
 use suppressions::DeadSuppressionCommentRule;
+use test_quality::rules as test_quality_rules;
 use test_reference::{
     AssertOnlyTestsWithoutProductCallsRule, TestWithoutAssertionsRule,
     TestWithoutProductReferenceRule,
@@ -39,6 +41,7 @@ pub fn rules() -> Vec<Box<dyn Rule>> {
         Box::new(IgnoredFilesystemErrorRule),
     ];
     rules.extend(fallible::rules());
+    rules.extend(test_quality_rules());
     rules
 }
 

@@ -50,6 +50,8 @@ pub enum Category {
     Regex,
     Shell,
     Path,
+    Async,
+    Performance,
 }
 
 impl Category {
@@ -62,6 +64,8 @@ impl Category {
             Category::Regex => "regex",
             Category::Shell => "shell",
             Category::Path => "path",
+            Category::Async => "async",
+            Category::Performance => "performance",
         }
     }
 
@@ -74,6 +78,8 @@ impl Category {
             "regex" => Some(Category::Regex),
             "shell" => Some(Category::Shell),
             "path" => Some(Category::Path),
+            "async" => Some(Category::Async),
+            "performance" => Some(Category::Performance),
             _ => None,
         }
     }

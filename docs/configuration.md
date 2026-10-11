@@ -13,6 +13,8 @@ lint = true
 regex = true
 shell = true
 path = true
+async = true
+performance = true
 
 [rules]
 # Per-rule overrides win over category toggles.

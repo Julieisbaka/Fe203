@@ -5,10 +5,12 @@
 //! 2. Register it in [`all_rules`].
 //! 3. (Optional) Add a new [`Category`] if it doesn't fit an existing one.
 
+pub mod async_checks;
 pub mod debug_code;
 pub mod easter_egg;
 pub mod lint;
 pub mod path_safety;
+pub mod performance;
 pub mod regex_checks;
 pub mod secrets;
 pub mod shell;
@@ -165,6 +167,7 @@ pub trait Rule: Sync {
 /// Returns every built-in rule, in stable ID order.
 pub fn all_rules() -> Vec<Box<dyn Rule>> {
     let mut rules: Vec<Box<dyn Rule>> = Vec::new();
+    rules.extend(async_checks::rules());
     rules.extend(debug_code::rules());
     rules.extend(unsafe_usage::rules());
     rules.extend(secrets::rules());
@@ -172,6 +175,7 @@ pub fn all_rules() -> Vec<Box<dyn Rule>> {
     rules.extend(regex_checks::rules());
     rules.extend(shell::rules());
     rules.extend(path_safety::rules());
+    rules.extend(performance::rules());
     rules.extend(easter_egg::rules());
     rules.sort_by_key(|rule| rule.id());
     rules

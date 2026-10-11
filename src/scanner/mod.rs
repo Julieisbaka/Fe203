@@ -77,7 +77,7 @@ mod tests {
         let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
         let mut ids = ids;
         ids.sort();
-        assert_eq!(ids, ["FE001", "FE020", "FE040", "FE063"]);
+        assert_eq!(ids, ["FE001", "FE020", "FE027", "FE040", "FE063"]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
