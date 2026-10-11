@@ -1,5 +1,4 @@
 //! Shared finding model: what a rule reports when it matches.
-// fe203-ignore-file FE020
 
 use std::fmt;
 use std::path::PathBuf;

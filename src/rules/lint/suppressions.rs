@@ -90,13 +90,10 @@ struct SuppressionDirective {
 }
 
 fn unsuppressed_finding_ids(ctx: &FileContext) -> HashSet<&'static str> {
-    let mut unsuppressed = ctx.content.to_string();
-    for (start, end) in rust_comment_ranges(ctx.content).into_iter().rev() {
-        let comment = unsuppressed[start..end]
-            .replace("fe203-ignore-file", "fe203-note-file")
-            .replace("fe203-ignore", "fe203-note");
-        unsuppressed.replace_range(start..end, &comment);
-    }
+    let unsuppressed = ctx
+        .content
+        .replace("fe203-ignore-file", "fe203-note-file")
+        .replace("fe203-ignore", "fe203-note");
     let unsuppressed_ctx = FileContext::new(ctx.path, &unsuppressed);
     let mut ids = HashSet::new();
     for rule in all_rules().iter().map(|r| r.as_ref()) {
