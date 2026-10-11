@@ -14,7 +14,10 @@ pub mod performance;
 pub mod regex_checks;
 pub mod secrets;
 pub mod shell;
+pub mod supply_chain;
 pub(crate) mod syntax;
+pub mod uncontrolled_command;
+pub mod uncontrolled_path;
 pub mod unsafe_usage;
 
 use std::collections::HashSet;
@@ -174,8 +177,11 @@ pub fn all_rules() -> Vec<Box<dyn Rule>> {
     rules.extend(lint::rules());
     rules.extend(regex_checks::rules());
     rules.extend(shell::rules());
+    rules.extend(uncontrolled_command::rules());
+    rules.extend(uncontrolled_path::rules());
     rules.extend(path_safety::rules());
     rules.extend(performance::rules());
+    rules.extend(supply_chain::rules());
     rules.extend(easter_egg::rules());
     rules.sort_by_key(|rule| rule.id());
     rules

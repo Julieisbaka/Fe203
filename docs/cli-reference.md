@@ -4,7 +4,8 @@
 
 Scans the given paths. If no path is provided, Fe203 prints an intro/quick-start
 screen and exits.
-Only `.rs` files are scanned by default, plus any extra files listed in
+Rust files and YAML workflow files under `.github/workflows/` are scanned by
+default, plus any extra files listed in
 `[paths].include` inside `fe203.toml` (see [configuration.md](configuration.md)).
 
 On Windows, Fe203 updates user `PATH` registration to keep a working

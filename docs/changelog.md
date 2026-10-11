@@ -11,6 +11,9 @@
 - Added FE110-FE112 for blocking calls in async functions, synchronous locks held across `.await`, and detached task handles.
 - Added FE123-FE124 for absolute paths passed to `.join()` and lossy path/UTF-8 conversions.
 - Added the `async` and `performance` categories, including FE130-FE133 for avoidable work in loops, collection pipelines, regex compilation, and string formatting.
+- Added FE102 and FE125 to trace uncontrolled external data into command execution and filesystem paths.
+- Added FE140 for GitHub Actions and reusable workflow references that are not pinned to full commit SHAs; workflow YAML files under `.github/workflows/` are scanned by default.
+- Added the `supply-chain` category toggle.
 - Hardened self-update asset selection so an asset can only use its own download URL, verified downloaded binary versions before replacement, and added Windows post-install verification with rollback on failure.
 
 ## `0.2.2`

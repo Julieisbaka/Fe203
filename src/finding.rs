@@ -52,6 +52,7 @@ pub enum Category {
     Path,
     Async,
     Performance,
+    SupplyChain,
 }
 
 impl Category {
@@ -66,6 +67,7 @@ impl Category {
             Category::Path => "path",
             Category::Async => "async",
             Category::Performance => "performance",
+            Category::SupplyChain => "supply-chain",
         }
     }
 
@@ -80,6 +82,7 @@ impl Category {
             "path" => Some(Category::Path),
             "async" => Some(Category::Async),
             "performance" => Some(Category::Performance),
+            "supply-chain" => Some(Category::SupplyChain),
             _ => None,
         }
     }

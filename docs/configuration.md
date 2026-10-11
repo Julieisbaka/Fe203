@@ -15,6 +15,8 @@ shell = true
 path = true
 async = true
 performance = true
+supply-chain = true
+supply-chain = true
 
 [rules]
 # Per-rule overrides win over category toggles.

@@ -32,6 +32,7 @@ never reused, even if a rule is removed.
 - [path.md](path.md) — `path`
 - [async.md](async.md) — `async`
 - [performance.md](performance.md) — `performance`
+- [supply-chain.md](supply-chain.md) — `supply-chain`
 
 ## Adding a New Rule
 

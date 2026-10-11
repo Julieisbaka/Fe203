@@ -13,6 +13,7 @@
 //! regex = true
 //! async = true
 //! performance = true
+//! supply-chain = true
 //!
 //! [rules]
 //! FE003 = false
@@ -156,7 +157,7 @@ impl Config {
         out.push_str("# Generated Fe203 configuration template\n");
         out.push_str("# Generated from your workspace .gitignore when available.\n\n");
         out.push_str("[rulesets]\n");
-        out.push_str("debug = true\nunsafe = true\nsecrets = true\nlint = true\nregex = true\nshell = true\npath = true\nasync = true\nperformance = true\n\n");
+        out.push_str("debug = true\nunsafe = true\nsecrets = true\nlint = true\nregex = true\nshell = true\npath = true\nasync = true\nperformance = true\nsupply-chain = true\n\n");
         out.push_str("[rules]\n");
         out.push_str("# FE003 = false   # allow ");
         // fe203-ignore FE003

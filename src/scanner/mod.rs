@@ -38,6 +38,31 @@ mod tests {
     }
 
     #[test]
+    fn discovers_github_workflow_yaml_files_by_default() {
+        let dir = temp_dir("workflow-yaml");
+        std::fs::create_dir_all(dir.join(".github/workflows")).unwrap();
+        std::fs::create_dir_all(dir.join(".github/actions")).unwrap();
+        std::fs::write(dir.join(".github/workflows/ci.yml"), "name: CI\n").unwrap();
+        std::fs::write(
+            dir.join(".github/workflows/release.yaml"),
+            "name: Release\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join(".github/actions/action.yml"),
+            "name: local action\n",
+        )
+        .unwrap();
+        let mut files = Vec::new();
+        discover_files(&dir, &[], &[], &mut files);
+        assert_eq!(files.len(), 2);
+        assert!(files
+            .iter()
+            .all(|path| path.starts_with(dir.join(".github/workflows"))));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn expands_workspace_members() {
         let dir = temp_dir("workspace-members");
         std::fs::create_dir_all(dir.join("crates/a/src")).unwrap();

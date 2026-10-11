@@ -135,9 +135,29 @@ fn walk(
         if path.is_dir() {
             walk(&path, root, exclude, include, on_file);
         } else if path.extension().is_some_and(|ext| ext == "rs")
+            || is_workflow_file(&path, root)
             || matches_any_pattern(&path, root, include)
         {
             on_file(path);
         }
     }
+}
+
+fn is_workflow_file(path: &Path, root: &Path) -> bool {
+    let Ok(relative) = path.strip_prefix(root) else {
+        return false;
+    };
+    let mut components = relative.components().peekable();
+    while let Some(component) = components.next() {
+        if component.as_os_str().eq_ignore_ascii_case(".github")
+            && components
+                .next()
+                .is_some_and(|next| next.as_os_str().eq_ignore_ascii_case("workflows"))
+        {
+            return path.extension().is_some_and(|ext| {
+                ext.eq_ignore_ascii_case("yml") || ext.eq_ignore_ascii_case("yaml")
+            });
+        }
+    }
+    false
 }

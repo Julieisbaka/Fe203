@@ -9,6 +9,7 @@ Rules covering path traversal and untrusted path-join risks.
 | FE122 | high     | `archive-entry-path-traversal` | archive extraction code that joins destination paths with entry-derived names without clear validation |
 | FE123 | warning  | `absolute-path-join`           | an absolute path passed to `.join()` that can replace the base directory                                  |
 | FE124 | info     | `lossy-path-conversion`        | lossy path or UTF-8 conversion that may discard data                                                     |
+| FE125 | high     | `uncontrolled-data-in-path`   | data from an uncontrolled source used to construct or access a filesystem path                           |
 
 ## FE120 — `path-traversal-literal`
 
@@ -53,6 +54,13 @@ than remaining beneath it.
 Flags `to_string_lossy()` and `String::from_utf8_lossy()` because invalid
 platform path bytes or UTF-8 are replaced. Keep the original OS string where
 possible, or handle strict UTF-8 conversion errors explicitly.
+
+## FE125 — `uncontrolled-data-in-path`
+
+Tracks obvious values from environment variables, command-line arguments,
+request/query values, and similarly named inputs into path constructors,
+`.join()`/`.push()`, and common filesystem APIs. The check is heuristic; it
+does not replace validation at the application boundary.
 
 See [overview.md](overview.md) for the rule model and [../suppressions.md](../suppressions.md)
 for how to suppress an individual finding.

@@ -6,6 +6,7 @@ Rules covering shell command construction risks.
 |-------|----------|--------------------------|---------------------------------------------------------------------------------------------------------|
 | FE100 | info     | `command-execution`      | presence of `Command::new(` / `std::process::Command::new(`                                             |
 | FE101 | high     | `shell-string-injection` | a shell interpreter invoked with a shell flag and a dynamically built or environment-fed command string |
+| FE102 | high     | `uncontrolled-command-line` | externally controlled data used as an executable or command argument |
 
 ## FE100 — `command-execution`
 
@@ -38,6 +39,14 @@ comments or unrelated string literals no longer triggers the rule.
 
 **Suggestion:** prefer passing arguments individually via `.arg()` instead of
 invoking a shell with an interpolated string.
+
+## FE102 — `uncontrolled-command-line`
+
+Tracks obvious values from environment variables, command-line arguments,
+request/query data, and similarly named parameters into `Command::new`,
+`.arg()`, or `.args()`. Allowlist executable names and validate arguments
+before launching a process. This is a lightweight heuristic, not complete
+interprocedural taint analysis.
 
 See [overview.md](overview.md) for the rule model and [../suppressions.md](../suppressions.md)
 for how to suppress an individual finding.
