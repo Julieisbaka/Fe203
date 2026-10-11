@@ -96,8 +96,9 @@ binary in place, and exits. It does not restart the original command.
 Until Fe203 is published as a Cargo package, install it from this repository
 in your workflow. Copy [the workflow template](templates/fe203.yml) to
 `.github/workflows/fe203.yml` in the repository you want to scan. The workflow
-builds and installs Fe203 with Cargo, then runs `fe203 .` on pushes to `main`
-and pull requests. A scan with findings exits with status 1.
+builds and installs Fe203 with Cargo, uploads SARIF results to GitHub code
+scanning, and fails when findings are present. It runs on pushes to `main` and
+pull requests. Enable code scanning for the repository to receive uploaded results.
 
 ## Your First Config
 

@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  security-events: write
 
 jobs:
   scan:
@@ -22,4 +23,25 @@ jobs:
         run: cargo install --git https://github.com/Julieisbaka/Fe203 --locked --bin fe203
 
       - name: Scan repository
-        run: fe203 .
+        id: scan
+        shell: bash
+        run: |
+          set +e
+          fe203 --sarif --pretty > fe203.sarif
+          status=$?
+          set -e
+          if [ "$status" -gt 1 ]; then
+            echo "Fe203 scan failed with exit code $status" >&2
+            exit "$status"
+          fi
+          echo "has_findings=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Upload SARIF to code scanning
+        if: always() && steps.scan.outcome == 'success'
+        uses: github/codeql-action/upload-sarif@9f759ee644a3e7c15c1390abf49868036c00067b # v3
+        with:
+          sarif_file: fe203.sarif
+
+      - name: Fail when findings are present
+        if: steps.scan.outputs.has_findings == '1'
+        run: exit 1
