@@ -94,17 +94,41 @@ fn is_full_commit_sha(revision: &str) -> bool {
 }
 
 fn is_yaml_suppressed(ctx: &FileContext, line_no: usize, id: &str, name: &str) -> bool {
-    [line_no.saturating_sub(1), line_no.saturating_sub(2)]
+    let lines: Vec<_> = ctx.content.lines().collect();
+    let target_matches = |text: &str| {
+        text.split(|ch: char| ch == ',' || ch.is_whitespace())
+            .any(|target| {
+                target.eq_ignore_ascii_case("all")
+                    || target.eq_ignore_ascii_case(id)
+                    || target.eq_ignore_ascii_case(name)
+                    || target.eq_ignore_ascii_case(Category::SupplyChain.name())
+            })
+    };
+    lines.iter().any(|line| {
+        let comment = line
+            .split_once('#')
+            .map(|(_, text)| text)
+            .unwrap_or("")
+            .trim();
+        comment
+            .split_once("fe203-ignore-file")
+            .is_some_and(|(_, targets)| target_matches(targets))
+    }) || [line_no.saturating_sub(1), line_no.saturating_sub(2)]
         .into_iter()
-        .filter_map(|number| ctx.content.lines().nth(number))
+        .filter_map(|number| lines.get(number))
         .any(|line| {
-            let comment = line.trim().strip_prefix('#').unwrap_or("").trim();
+            let comment = line
+                .split_once('#')
+                .map(|(_, text)| text)
+                .unwrap_or("")
+                .trim();
             let Some((_, targets)) = comment.split_once("fe203-ignore") else {
                 return false;
             };
-            targets
-                .split(|ch: char| ch == ',' || ch.is_whitespace())
-                .any(|target| target.eq_ignore_ascii_case(id) || target.eq_ignore_ascii_case(name))
+            if targets.starts_with("-file") {
+                return false;
+            }
+            target_matches(targets)
         })
 }
 

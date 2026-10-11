@@ -1,18 +1,7 @@
 use crate::finding::{Category, Finding, Severity};
 use crate::rules::syntax::collect_method_chains;
-use crate::rules::{is_comment_line, is_rule_ignored, word_occurrences, FileContext, Rule};
-
-const SOURCE_MARKERS: &[&str] = &[
-    "env::var(",
-    "env::args(",
-    "args_os(",
-    "read_line(",
-    "stdin(",
-    "request.",
-    "query.",
-    "params.",
-];
-const SOURCE_NAME_PARTS: &[&str] = &["user", "input", "argument", "request", "query"];
+use crate::rules::uncontrolled_data::{controlled_names, is_controlled};
+use crate::rules::{is_rule_ignored, FileContext, Rule};
 
 pub fn rules() -> Vec<Box<dyn Rule>> {
     vec![Box::new(UncontrolledCommandRule)]
@@ -50,7 +39,7 @@ impl Rule for UncontrolledCommandRule {
     }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
-        let tainted = controlled_data_names(ctx.content);
+        let tainted = controlled_names(ctx.content);
         let lines: Vec<_> = ctx.lines().collect();
         let mut findings = Vec::new();
 
@@ -107,80 +96,6 @@ fn add_finding(
     }
 }
 
-fn controlled_data_names(content: &str) -> Vec<String> {
-    let mut names = Vec::new();
-    for line in content.lines().filter(|line| !is_comment_line(line)) {
-        let lower = line.to_ascii_lowercase();
-        if let Some((name, value)) = simple_binding(line) {
-            if SOURCE_MARKERS.iter().any(|marker| lower.contains(marker))
-                || SOURCE_NAME_PARTS.iter().any(|part| name.contains(part))
-            {
-                push_unique(&mut names, name.to_string());
-            } else if names
-                .iter()
-                .any(|source| contains_identifier(value, source))
-            {
-                push_unique(&mut names, name.to_string());
-            }
-        }
-
-        if lower.contains("fn ") {
-            let Some((_, params)) = line.split_once('(') else {
-                continue;
-            };
-            let Some((params, _)) = params.split_once(')') else {
-                continue;
-            };
-            for param in params.split(',') {
-                let Some((name, _)) = param.split_once(':') else {
-                    continue;
-                };
-                let name = name.trim().trim_start_matches("mut ").trim();
-                if SOURCE_NAME_PARTS
-                    .iter()
-                    .any(|part| name.to_ascii_lowercase().contains(part))
-                {
-                    push_unique(&mut names, name.to_string());
-                }
-            }
-        }
-    }
-    names
-}
-
-fn simple_binding(line: &str) -> Option<(&str, &str)> {
-    let (_, binding) = line.split_once("let ")?;
-    let binding = binding
-        .trim_start()
-        .strip_prefix("mut ")
-        .unwrap_or(binding.trim_start());
-    let (name, value) = binding.split_once('=')?;
-    let name = name.trim().split(':').next()?.trim();
-    (!name.is_empty()).then_some((name, value))
-}
-
-fn push_unique(names: &mut Vec<String>, name: String) {
-    if !names.iter().any(|existing| existing == &name) {
-        names.push(name);
-    }
-}
-
-fn contains_identifier(text: &str, name: &str) -> bool {
-    !word_occurrences(text, name).is_empty()
-}
-
-fn is_controlled(expression: &str, names: &[String]) -> bool {
-    SOURCE_MARKERS
-        .iter()
-        .any(|marker| expression.contains(marker))
-        || SOURCE_NAME_PARTS
-            .iter()
-            .any(|part| expression.to_ascii_lowercase().contains(part))
-        || names
-            .iter()
-            .any(|name| contains_identifier(expression, name))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -213,7 +128,12 @@ mod tests {
 
     #[test]
     fn ignores_constant_arguments_and_honors_suppression() {
-        assert!(scan("Command::new(\"tool\").arg(\"fixed\");\n").is_empty());
+        assert!(scan(concat!(
+            "Command::new(\"tool\").arg(\"fixed\");\n",
+            "Command::new(\"input\").arg(\"fixed user input\");\n",
+            "let note = \"env::var(user_input)\";\n",
+        ))
+        .is_empty());
         assert!(
             scan("// fe203-ignore FE102\nCommand::new(\"tool\").arg(user_input);\n").is_empty()
         );

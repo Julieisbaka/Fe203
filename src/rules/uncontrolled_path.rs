@@ -1,18 +1,7 @@
 use crate::finding::{Category, Finding, Severity};
 use crate::rules::syntax::{collect_invocations, collect_method_chains, InvocationKind};
-use crate::rules::{is_comment_line, is_rule_ignored, word_occurrences, FileContext, Rule};
-
-const SOURCE_MARKERS: &[&str] = &[
-    "env::var(",
-    "env::args(",
-    "args_os(",
-    "read_line(",
-    "stdin(",
-    "request.",
-    "query.",
-    "params.",
-];
-const SOURCE_NAME_PARTS: &[&str] = &["user", "input", "argument", "request", "query"];
+use crate::rules::uncontrolled_data::{code_only, controlled_names, is_controlled};
+use crate::rules::{is_rule_ignored, FileContext, Rule};
 
 pub fn rules() -> Vec<Box<dyn Rule>> {
     vec![Box::new(UncontrolledPathRule)]
@@ -59,7 +48,7 @@ impl Rule for UncontrolledPathRule {
     }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
-        let tainted = controlled_data_names(ctx.content);
+        let tainted = controlled_names(ctx.content);
         let lines: Vec<_> = ctx.lines().collect();
         let mut findings = Vec::new();
 
@@ -137,72 +126,8 @@ fn add_finding(
     }
 }
 
-fn controlled_data_names(content: &str) -> Vec<String> {
-    let mut names: Vec<String> = Vec::new();
-    for line in content.lines().filter(|line| !is_comment_line(line)) {
-        let lower = line.to_ascii_lowercase();
-        if let Some((name, value)) = simple_binding(line) {
-            if SOURCE_MARKERS.iter().any(|marker| lower.contains(marker))
-                || SOURCE_NAME_PARTS.iter().any(|part| name.contains(part))
-                || names
-                    .iter()
-                    .any(|source| !word_occurrences(value, source).is_empty())
-            {
-                if !names.iter().any(|existing| existing == name) {
-                    names.push(name.to_string());
-                }
-            }
-        }
-        if lower.contains("fn ") {
-            let Some((_, params)) = line.split_once('(') else {
-                continue;
-            };
-            let Some((params, _)) = params.split_once(')') else {
-                continue;
-            };
-            for param in params.split(',') {
-                let Some((name, _)) = param.split_once(':') else {
-                    continue;
-                };
-                let name = name.trim().trim_start_matches("mut ").trim();
-                if SOURCE_NAME_PARTS
-                    .iter()
-                    .any(|part| name.to_ascii_lowercase().contains(part))
-                    && !names.iter().any(|existing| existing == name)
-                {
-                    names.push(name.to_string());
-                }
-            }
-        }
-    }
-    names
-}
-
-fn simple_binding(line: &str) -> Option<(&str, &str)> {
-    let (_, binding) = line.split_once("let ")?;
-    let binding = binding
-        .trim_start()
-        .strip_prefix("mut ")
-        .unwrap_or(binding.trim_start());
-    let (name, value) = binding.split_once('=')?;
-    let name = name.trim().split(':').next()?.trim();
-    (!name.is_empty()).then_some((name, value))
-}
-
-fn is_controlled(expression: &str, names: &[String]) -> bool {
-    SOURCE_MARKERS
-        .iter()
-        .any(|marker| expression.contains(marker))
-        || SOURCE_NAME_PARTS
-            .iter()
-            .any(|part| expression.to_ascii_lowercase().contains(part))
-        || names
-            .iter()
-            .any(|name| !word_occurrences(expression, name).is_empty())
-}
-
 fn looks_validated(expression: &str) -> bool {
-    let lower = expression.to_ascii_lowercase();
+    let lower = code_only(expression).to_ascii_lowercase();
     [
         "sanitize",
         "validate",
@@ -247,7 +172,12 @@ mod tests {
 
     #[test]
     fn ignores_fixed_or_validated_path_expressions_and_respects_suppression() {
-        assert!(scan("let path = root.join(\"assets\");\n").is_empty());
+        assert!(scan(concat!(
+            "let path = root.join(\"assets\");\n",
+            "let input_path = root.join(\"user_input\");\n",
+            "let note = \"env::var(user_input)\";\n",
+        ))
+        .is_empty());
         assert!(scan("let path = root.join(validate_path(user_input)?);\n").is_empty());
         assert!(scan("// fe203-ignore FE125\nlet path = root.join(user_input);\n").is_empty());
     }

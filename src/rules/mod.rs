@@ -17,6 +17,7 @@ pub mod shell;
 pub mod supply_chain;
 pub(crate) mod syntax;
 pub mod uncontrolled_command;
+mod uncontrolled_data;
 pub mod uncontrolled_path;
 pub mod unsafe_usage;
 

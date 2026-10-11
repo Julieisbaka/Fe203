@@ -135,7 +135,7 @@ fn walk(
         if path.is_dir() {
             walk(&path, root, exclude, include, on_file);
         } else if path.extension().is_some_and(|ext| ext == "rs")
-            || is_workflow_file(&path, root)
+            || is_workflow_file(&path)
             || matches_any_pattern(&path, root, include)
         {
             on_file(path);
@@ -143,21 +143,16 @@ fn walk(
     }
 }
 
-fn is_workflow_file(path: &Path, root: &Path) -> bool {
-    let Ok(relative) = path.strip_prefix(root) else {
-        return false;
-    };
-    let mut components = relative.components().peekable();
-    while let Some(component) = components.next() {
-        if component.as_os_str().eq_ignore_ascii_case(".github")
-            && components
-                .next()
-                .is_some_and(|next| next.as_os_str().eq_ignore_ascii_case("workflows"))
-        {
-            return path.extension().is_some_and(|ext| {
-                ext.eq_ignore_ascii_case("yml") || ext.eq_ignore_ascii_case("yaml")
-            });
-        }
-    }
-    false
+fn is_workflow_file(path: &Path) -> bool {
+    let components: Vec<_> = path.components().collect();
+    components.windows(2).any(|pair| {
+        pair[0]
+            .as_os_str()
+            .eq_ignore_ascii_case(".github")
+            && pair[1]
+                .as_os_str()
+                .eq_ignore_ascii_case("workflows")
+    }) && path.extension().is_some_and(|ext| {
+        ext.eq_ignore_ascii_case("yml") || ext.eq_ignore_ascii_case("yaml")
+    })
 }
