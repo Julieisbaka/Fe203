@@ -219,15 +219,13 @@ fn extract_test_functions(content: &str) -> Vec<TestFunction<'_>> {
 
 fn contains_assert_macro(body: &str) -> bool {
     collect_invocations(body).into_iter().any(|invocation| {
-        invocation.kind == InvocationKind::Macro
-            && ASSERT_MACROS.contains(&invocation.path)
+        invocation.kind == InvocationKind::Macro && ASSERT_MACROS.contains(&invocation.path)
     })
 }
 
 fn assert_only_expression_style(body: &str) -> bool {
     collect_invocations(body).into_iter().all(|invocation| {
-        invocation.kind == InvocationKind::Macro
-            && ASSERT_MACROS.contains(&invocation.path)
+        invocation.kind == InvocationKind::Macro && ASSERT_MACROS.contains(&invocation.path)
     })
 }
 
