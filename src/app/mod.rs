@@ -83,7 +83,7 @@ pub fn run(args: &[String]) -> i32 {
     }
 
     if let Some(rule_id) = &opts.explain {
-        if let Some(rule) = rules::rule_by_id(&registry, rule_id) {
+        if let Some(rule) = rules::rule_by_id(&registry, rule_id).filter(|rule| !rule.is_hidden()) {
             print!("{}", rules::render_rule_explanation(rule));
             return 0;
         }
