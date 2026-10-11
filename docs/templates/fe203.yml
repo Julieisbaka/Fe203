@@ -1,0 +1,25 @@
+name: Fe203
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+
+      - name: Install Fe203 from Git
+        run: cargo install --git https://github.com/Julieisbaka/Fe203 --locked --bin fe203
+
+      - name: Scan repository
+        run: fe203 .

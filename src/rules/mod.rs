@@ -425,10 +425,12 @@ pub(crate) fn count_identifier_uses(content: &str, name: &str) -> Vec<usize> {
             b'r' => {
                 if let Some(end) = skip_raw_string_literal(bytes, index) {
                     if is_format_macro_before(content, index) {
-                        let start = index + 1 + bytes[index + 1..]
-                            .iter()
-                            .take_while(|byte| **byte == b'#')
-                            .count()
+                        let start = index
+                            + 1
+                            + bytes[index + 1..]
+                                .iter()
+                                .take_while(|byte| **byte == b'#')
+                                .count()
                             + 1;
                         out.extend(format_capture_uses(content, start, end, needle));
                     }
@@ -465,7 +467,7 @@ pub(crate) fn count_identifier_uses(content: &str, name: &str) -> Vec<usize> {
     out
 }
 
-fn skip_string_literal(bytes: &[u8], mut index: usize, terminator: u8) -> usize {
+pub(crate) fn skip_string_literal(bytes: &[u8], mut index: usize, terminator: u8) -> usize {
     while index < bytes.len() {
         if bytes[index] == b'\\' {
             index += 2;
@@ -533,15 +535,15 @@ fn is_format_macro_before(content: &str, literal_start: usize) -> bool {
     let Some(prefix) = prefix.strip_suffix('(') else {
         return false;
     };
+    let Some(prefix) = prefix.trim_end().strip_suffix('!') else {
+        return false;
+    };
     let prefix = prefix.trim_end();
     let macro_start = prefix
         .rfind(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
         .map_or(0, |index| index + 1);
-    let macro_name = prefix[macro_start..].strip_suffix('!').unwrap_or("");
-    let macro_name = macro_name
-        .rsplit("::")
-        .next()
-        .unwrap_or(macro_name);
+    let macro_name = &prefix[macro_start..];
+    let macro_name = macro_name.rsplit("::").next().unwrap_or(macro_name);
     FORMAT_MACROS.contains(&macro_name)
 }
 
@@ -575,7 +577,7 @@ fn format_capture_uses(content: &str, start: usize, end: usize, needle: &[u8]) -
     out
 }
 
-fn skip_raw_string_literal(bytes: &[u8], index: usize) -> Option<usize> {
+pub(crate) fn skip_raw_string_literal(bytes: &[u8], index: usize) -> Option<usize> {
     let mut hash_count = 0;
     let mut cursor = index + 1;
     while cursor < bytes.len() && bytes[cursor] == b'#' {
@@ -606,6 +608,61 @@ fn skip_raw_string_literal(bytes: &[u8], index: usize) -> Option<usize> {
     }
 
     Some(bytes.len())
+}
+
+pub(crate) fn rust_comment_ranges(content: &str) -> Vec<(usize, usize)> {
+    let bytes = content.as_bytes();
+    let mut ranges = Vec::new();
+    let mut index = 0usize;
+
+    while index < bytes.len() {
+        if bytes[index] == b'/' && bytes.get(index + 1) == Some(&b'/') {
+            let start = index + 2;
+            let end = bytes[start..]
+                .iter()
+                .position(|byte| *byte == b'\n')
+                .map_or(bytes.len(), |offset| start + offset);
+            ranges.push((start, end));
+            index = end;
+        } else if bytes[index] == b'/' && bytes.get(index + 1) == Some(&b'*') {
+            let start = index + 2;
+            let mut cursor = start;
+            let mut depth = 1usize;
+            while cursor < bytes.len() && depth > 0 {
+                if bytes.get(cursor..cursor + 2) == Some(b"/*") {
+                    depth += 1;
+                    cursor += 2;
+                } else if bytes.get(cursor..cursor + 2) == Some(b"*/") {
+                    depth -= 1;
+                    if depth == 0 {
+                        ranges.push((start, cursor));
+                    }
+                    cursor += 2;
+                } else {
+                    cursor += 1;
+                }
+            }
+            index = cursor;
+        } else if bytes[index] == b'"' {
+            index = skip_string_literal(bytes, index + 1, b'"');
+        } else if bytes[index] == b'\'' {
+            if let Some(end) = skip_char_literal(bytes, index) {
+                index = end;
+            } else {
+                index += 1;
+            }
+        } else if bytes[index] == b'r' {
+            if let Some(end) = skip_raw_string_literal(bytes, index) {
+                index = end;
+            } else {
+                index += 1;
+            }
+        } else {
+            index += 1;
+        }
+    }
+
+    ranges
 }
 
 fn is_ident_start(byte: u8) -> bool {

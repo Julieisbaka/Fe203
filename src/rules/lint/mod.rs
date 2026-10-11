@@ -189,6 +189,21 @@ mod tests {
     }
 
     #[test]
+    fn ignores_suppression_examples_inside_rust_strings() {
+        let findings = scan_all(
+            "fn f() {\n    let _ordinary = \"// fe203-ignore FE999\";\n    let _raw = r#\"// fe203-ignore FE998\"#;\n}\n",
+        );
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn recognizes_suppression_comment_after_a_string() {
+        let findings = scan_all("fn f() {\n    let _source = \"//\"; // fe203-ignore FE999\n}\n");
+        let ids: Vec<&str> = findings.iter().map(|finding| finding.rule_id).collect();
+        assert_eq!(ids, ["FE066"]);
+    }
+
+    #[test]
     fn keeps_suppression_when_rule_matches() {
         let findings = scan_all("// fe203-ignore FE001\nfn f() { todo!(); }\n");
         assert!(findings.is_empty());

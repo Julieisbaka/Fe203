@@ -80,6 +80,8 @@ original command.
 
 - [docs/README.md](docs/README.md) — full documentation index (CLI reference,
   configuration, suppressions, architecture, rules, and roadmap).
+- [docs/templates/fe203.yml](docs/templates/fe203.yml) — GitHub Actions workflow
+  template that installs Fe203 from this Git repository until the crate is published.
 - [docs/changelog.md](docs/changelog.md) — release history.
 - [docs/contributing.md](docs/contributing.md) — contribution guidance.
 

@@ -1,7 +1,5 @@
 use crate::finding::Finding;
-use crate::rules::{
-    count_identifier_uses, is_rule_ignored, skip_char_literal, FileContext, Rule,
-};
+use crate::rules::{count_identifier_uses, is_rule_ignored, skip_char_literal, FileContext, Rule};
 
 pub(super) struct Declaration {
     pub(super) name: String,
@@ -168,12 +166,11 @@ fn find_type_ascription(pattern: &str) -> Option<usize> {
             b']' => bracket_depth = bracket_depth.saturating_sub(1),
             b'{' => brace_depth += 1,
             b'}' => brace_depth = brace_depth.saturating_sub(1),
-            b':'
-                if paren_depth == 0
-                    && bracket_depth == 0
-                    && brace_depth == 0
-                    && bytes.get(idx + 1) != Some(&b':')
-                    && (idx == 0 || bytes[idx - 1] != b':') =>
+            b':' if paren_depth == 0
+                && bracket_depth == 0
+                && brace_depth == 0
+                && bytes.get(idx + 1) != Some(&b':')
+                && (idx == 0 || bytes[idx - 1] != b':') =>
             {
                 return Some(idx);
             }
@@ -321,9 +318,7 @@ fn rust_code_mask(content: &str) -> Vec<bool> {
                     .map_or(bytes.len(), |offset| idx + offset);
                 Some(end)
             }
-            b'/' if bytes.get(idx + 1) == Some(&b'*') => {
-                Some(skip_block_comment(bytes, idx + 2))
-            }
+            b'/' if bytes.get(idx + 1) == Some(&b'*') => Some(skip_block_comment(bytes, idx + 2)),
             b'"' => Some(skip_string_literal(bytes, idx + 1, b'"')),
             b'\'' => skip_char_literal(bytes, idx),
             b'r' => skip_raw_string_literal(bytes, idx),

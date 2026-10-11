@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::finding::{Category, Finding, Severity};
-use crate::rules::{all_rules, is_rule_ignored, FileContext, Rule};
+use crate::rules::{all_rules, is_rule_ignored, rust_comment_ranges, FileContext, Rule};
 
 /// Flags suppression IDs that do not correspond to any rule finding in the file.
 pub struct DeadSuppressionCommentRule;
@@ -90,10 +90,13 @@ struct SuppressionDirective {
 }
 
 fn unsuppressed_finding_ids(ctx: &FileContext) -> HashSet<&'static str> {
-    let unsuppressed = ctx
-        .content
-        .replace("fe203-ignore-file", "fe203-note-file")
-        .replace("fe203-ignore", "fe203-note");
+    let mut unsuppressed = ctx.content.to_string();
+    for (start, end) in rust_comment_ranges(ctx.content).into_iter().rev() {
+        let comment = unsuppressed[start..end]
+            .replace("fe203-ignore-file", "fe203-note-file")
+            .replace("fe203-ignore", "fe203-note");
+        unsuppressed.replace_range(start..end, &comment);
+    }
     let unsuppressed_ctx = FileContext::new(ctx.path, &unsuppressed);
     let mut ids = HashSet::new();
     for rule in all_rules().iter().map(|r| r.as_ref()) {
@@ -109,17 +112,24 @@ fn unsuppressed_finding_ids(ctx: &FileContext) -> HashSet<&'static str> {
 
 fn suppression_directives(content: &str) -> Vec<SuppressionDirective> {
     let mut out = Vec::new();
-    for (idx, line) in content.lines().enumerate() {
-        let line_no = idx + 1;
-        let Some(comment) = extract_comment_text(line) else {
-            continue;
-        };
-        if let Some((_, rest)) = comment.split_once("fe203-ignore-file") {
-            out.extend(tokens_to_directives(rest, line_no, line));
-            continue;
-        }
-        if let Some((_, rest)) = comment.split_once("fe203-ignore") {
-            out.extend(tokens_to_directives(rest, line_no, line));
+    let source_lines: Vec<&str> = content.lines().collect();
+    for (start, end) in rust_comment_ranges(content) {
+        let comment_line_no = content[..start]
+            .bytes()
+            .filter(|byte| *byte == b'\n')
+            .count()
+            + 1;
+        for (offset, comment_line) in content[start..end].split('\n').enumerate() {
+            let line_no = comment_line_no + offset;
+            let line = source_lines
+                .get(line_no.saturating_sub(1))
+                .copied()
+                .unwrap_or("");
+            if let Some((_, rest)) = comment_line.split_once("fe203-ignore-file") {
+                out.extend(tokens_to_directives(rest, line_no, line));
+            } else if let Some((_, rest)) = comment_line.split_once("fe203-ignore") {
+                out.extend(tokens_to_directives(rest, line_no, line));
+            }
         }
     }
     out
@@ -146,19 +156,4 @@ fn looks_like_rule_id(token: &str) -> bool {
             .iter()
             .skip(2)
             .all(|byte| byte.is_ascii_digit())
-}
-
-fn extract_comment_text(line: &str) -> Option<&str> {
-    let trimmed = line.trim_start();
-    if let Some(pos) = trimmed.find("//") {
-        return Some(&trimmed[pos + 2..]);
-    }
-    if let Some(start) = trimmed.find("/*") {
-        let rest = &trimmed[start + 2..];
-        if let Some(end) = rest.find("*/") {
-            return Some(&rest[..end]);
-        }
-        return Some(rest);
-    }
-    None
 }

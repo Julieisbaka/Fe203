@@ -91,6 +91,14 @@ fe203 --self-update
 when available, verifies the downloaded binary version, replaces the existing
 binary in place, and exits. It does not restart the original command.
 
+## Run Fe203 in GitHub Actions
+
+Until Fe203 is published as a Cargo package, install it from this repository
+in your workflow. Copy [the workflow template](templates/fe203.yml) to
+`.github/workflows/fe203.yml` in the repository you want to scan. The workflow
+builds and installs Fe203 with Cargo, then runs `fe203 .` on pushes to `main`
+and pull requests. A scan with findings exits with status 1.
+
 ## Your First Config
 
 Generate a starter `fe203.toml`:
