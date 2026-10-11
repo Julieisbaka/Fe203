@@ -14,7 +14,7 @@ const SOURCE_MARKERS: &[&str] = &[
 const SOURCE_NAME_PARTS: &[&str] = &["user", "input", "argument", "request", "query"];
 
 pub(crate) fn controlled_names(content: &str) -> Vec<String> {
-    let mut names = Vec::new();
+    let mut names: Vec<String> = Vec::new();
     for line in content.lines().filter(|line| !is_comment_line(line)) {
         let code = code_only(line);
         let lower = code.to_ascii_lowercase();

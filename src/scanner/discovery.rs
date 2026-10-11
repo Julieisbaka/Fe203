@@ -146,13 +146,9 @@ fn walk(
 fn is_workflow_file(path: &Path) -> bool {
     let components: Vec<_> = path.components().collect();
     components.windows(2).any(|pair| {
-        pair[0]
-            .as_os_str()
-            .eq_ignore_ascii_case(".github")
-            && pair[1]
-                .as_os_str()
-                .eq_ignore_ascii_case("workflows")
-    }) && path.extension().is_some_and(|ext| {
-        ext.eq_ignore_ascii_case("yml") || ext.eq_ignore_ascii_case("yaml")
-    })
+        pair[0].as_os_str().eq_ignore_ascii_case(".github")
+            && pair[1].as_os_str().eq_ignore_ascii_case("workflows")
+    }) && path
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("yml") || ext.eq_ignore_ascii_case("yaml"))
 }
