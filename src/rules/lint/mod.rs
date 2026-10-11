@@ -5,6 +5,7 @@
 mod clamp;
 mod comments;
 mod fallible;
+mod ignored_error;
 mod ignored_result;
 pub(crate) mod suppressions;
 mod test_reference;
@@ -13,6 +14,7 @@ mod unused;
 use crate::rules::Rule;
 use clamp::ClampLikePatternRule;
 use comments::{EmptyCommentRule, EmptyDocCommentRule};
+use ignored_error::IgnoredFilesystemErrorRule;
 use ignored_result::IgnoredProductResultRule;
 use suppressions::DeadSuppressionCommentRule;
 use test_reference::{
@@ -34,6 +36,7 @@ pub fn rules() -> Vec<Box<dyn Rule>> {
         Box::new(AssertOnlyTestsWithoutProductCallsRule),
         Box::new(TestWithoutAssertionsRule),
         Box::new(IgnoredProductResultRule),
+        Box::new(IgnoredFilesystemErrorRule),
     ];
     rules.extend(fallible::rules());
     rules

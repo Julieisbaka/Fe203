@@ -194,3 +194,43 @@ fn easter_egg_rule_runs_through_the_full_pipeline() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn security_and_error_handling_rules_run_through_the_full_pipeline() {
+    let dir = fixture_dir("expanded-rules");
+    std::fs::write(
+        dir.join("fixture.rs"),
+        concat!(
+            "fn risky(bits: u32, resource: T, builder: ClientBuilder) {\n",
+            "    let _ = std::mem::transmute::<u32, f32>(bits);\n",
+            "    std::mem::forget(resource);\n",
+            "    let _ = std::mem::zeroed::<T>();\n",
+            "    let _ = Md5::new();\n",
+            "    let _ = builder.danger_accept_invalid_certs(true);\n",
+            "    let _key = \"-----BEGIN PRIVATE KEY-----\";\n",
+            "    let _ = std::fs::remove_file(\"tmp\");\n",
+            "}\n",
+        ),
+    )
+    .unwrap();
+
+    let registry = all_rules();
+    let rules: Vec<&dyn Rule> = registry.iter().map(|r| r.as_ref()).collect();
+    let mut files = Vec::new();
+    discover_files(
+        &dir,
+        &Config::default().exclude,
+        &Config::default().include,
+        &mut files,
+    );
+    let findings = scan_files(&files, &rules, true);
+
+    let mut ids: Vec<&str> = findings.iter().map(|finding| finding.rule_id).collect();
+    ids.sort();
+    assert_eq!(
+        ids,
+        ["FE022", "FE023", "FE024", "FE045", "FE046", "FE047", "FE067"]
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -11,6 +11,7 @@ General code-quality lint rules.
 | FE064 | warning | unused constants |
 | FE065 | warning | test code with `#[test]`/async test attributes that does not reference product code |
 | FE066 | info | stale `fe203-ignore`/`fe203-ignore-file` rule IDs that do not match any finding in the file |
+| FE067 | warning | `let _ =` discarding common fallible filesystem operations |
 | FE075 | warning | test function with assert-only logic and no product-code call/reference |
 | FE076 | warning | `unwrap`/`expect`-style calls outside test code |
 | FE077 | warning | error-erasing patterns like `map_err(\|_\| ...)` |
@@ -38,6 +39,10 @@ General code-quality lint rules.
 - **FE079**: Added in `0.2.0`. Flags bare statements like `crate::run(x);`
   where a product-code call result is silently dropped. Bind with `let _ =`
   to mark an intentional drop.
+- **FE067**: Reports same-line `let _ =` bindings around common fallible
+  filesystem operations. It is intentionally narrow and may miss aliases or
+  multi-line assignments; use a suppression when ignoring the error is
+  deliberate.
 
 See [overview.md](overview.md) for the rule model and [../suppressions.md](../suppressions.md)
 for how to suppress an individual finding.

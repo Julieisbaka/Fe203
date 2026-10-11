@@ -96,6 +96,7 @@ fn parses_semver_triplet_variants() {
             major: 0,
             minor: 2,
             patch: 1,
+            prerelease: None,
         })
     );
     assert_eq!(
@@ -104,9 +105,37 @@ fn parses_semver_triplet_variants() {
             major: 1,
             minor: 4,
             patch: 3,
+            prerelease: Some("beta.1".to_string()),
         })
     );
     assert_eq!(parse_semver_triplet("1.2"), None);
+    assert_eq!(parse_semver_triplet("vv1.2.3"), None);
+    assert_eq!(parse_semver_triplet("01.2.3"), None);
+    assert_eq!(parse_semver_triplet("1.2.3-01"), None);
+    assert_eq!(parse_semver_triplet("1.2.3+"), None);
+}
+
+#[test]
+fn compares_prereleases_before_stable_versions() {
+    let alpha = parse_semver_triplet("1.2.3-alpha").unwrap();
+    let beta_two = parse_semver_triplet("1.2.3-beta.2").unwrap();
+    let beta_eleven = parse_semver_triplet("1.2.3-beta.11").unwrap();
+    let stable = parse_semver_triplet("1.2.3").unwrap();
+
+    assert!(alpha < beta_two);
+    assert!(beta_two < beta_eleven);
+    assert!(beta_eleven < stable);
+    assert_eq!(
+        parse_semver_triplet("1.2.3+build.1"),
+        parse_semver_triplet("1.2.3+build.2")
+    );
+}
+
+#[test]
+fn verifies_downloaded_binary_version_output_exactly() {
+    assert!(binary_version_matches("fe203 1.2.3\n", "1.2.3"));
+    assert!(!binary_version_matches("fe203 1.2.4\n", "1.2.3"));
+    assert!(!binary_version_matches("fe203 1.2.30\n", "1.2.3"));
 }
 
 #[test]
@@ -155,4 +184,21 @@ fn parses_latest_release_json_and_asset() {
         info.asset_url,
         "https://example.invalid/fe203-linux.tar.gz".to_string()
     );
+}
+
+#[test]
+fn release_asset_url_must_belong_to_the_matching_asset() {
+    let json = r#"{
+  "tag_name": "v0.2.1",
+  "assets": [
+    { "name": "fe203-v0.2.1-x86_64-unknown-linux-gnu.tar.gz" },
+    {
+      "name": "other-asset.zip",
+      "browser_download_url": "https://example.invalid/other.zip"
+    }
+  ]
+}"#;
+    let spec = types::target_asset_spec("linux", "x86_64").unwrap();
+    let parsed = release::parse_latest_release_json(json, spec).unwrap();
+    assert!(parsed.asset_url.is_empty());
 }

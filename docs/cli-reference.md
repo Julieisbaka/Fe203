@@ -182,9 +182,10 @@ Added in `0.2.1`.
 Downloads and installs the latest GitHub Release binary for Fe203.
 
 - Chooses the release asset matching the current OS/architecture when available
-- Schedules replacement of the current executable after the running process exits
+- Checks that the downloaded executable reports the version from the release tag before installation
 - Replaces the installed binary in place to avoid accumulating old copies
-- Automatically runs the updated CLI after install
+- On Windows, schedules replacement after the running process exits and verifies the installed version; a failed check restores the previous executable
+- Exits after the update; it does not restart the original command
 
 Added in `0.2.1`.
 

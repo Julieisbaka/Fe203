@@ -1,5 +1,12 @@
 # Fe203 Changelog
 
+## Unreleased
+
+- Added FE022-FE024 to flag transmute APIs, destructor suppression, and zero-initialized values for manual safety review.
+- Added FE045-FE047 for weak hash usage, disabled TLS validation, and embedded PEM private-key markers.
+- Added FE067 for discarded results from common filesystem operations.
+- Hardened self-update asset selection so an asset can only use its own download URL, verified downloaded binary versions before replacement, and added Windows post-install verification with rollback on failure.
+
 ## `0.2.2`
 
 - Fixed `--self-update` on Unix: staging now uses a unique temporary filename so a stale leftover from a previous failed update (potentially owned by a different user) no longer blocks the next attempt.

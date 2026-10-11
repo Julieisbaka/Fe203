@@ -93,7 +93,8 @@ fn fetch_latest_release_json() -> Result<String, String> {
 
 pub(super) fn parse_latest_release_json(json: &str, spec: TargetAssetSpec) -> Option<ReleaseInfo> {
     let tag = extract_json_string_field(json, "tag_name")?;
-    let tag_no_v = tag.trim().trim_start_matches('v').to_string();
+    let tag = tag.trim();
+    let tag_no_v = tag.strip_prefix('v').unwrap_or(tag).to_string();
     let version = super::parse_semver_triplet(&tag_no_v)?;
 
     let expected_a = format!("fe203-v{}-{}", tag_no_v, spec.suffix);

@@ -173,6 +173,7 @@ pub fn all_rules() -> Vec<Box<dyn Rule>> {
     rules.extend(shell::rules());
     rules.extend(path_safety::rules());
     rules.extend(easter_egg::rules());
+    rules.sort_by_key(|rule| rule.id());
     rules
 }
 
@@ -494,6 +495,17 @@ fn skip_raw_string_literal(bytes: &[u8], index: usize) -> Option<usize> {
     }
 
     Some(bytes.len())
+}
+
+#[cfg(test)]
+mod registry_tests {
+    use super::all_rules;
+
+    #[test]
+    fn rule_registry_has_unique_ids_in_stable_order() {
+        let ids: Vec<&str> = all_rules().iter().map(|rule| rule.id()).collect();
+        assert!(ids.windows(2).all(|pair| pair[0] < pair[1]));
+    }
 }
 
 fn is_ident_start(byte: u8) -> bool {
