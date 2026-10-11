@@ -1,19 +1,14 @@
 use crate::finding::{Category, Finding, Severity};
+use crate::rules::syntax::{collect_invocations, InvocationKind};
 use crate::rules::{is_comment_line, is_rule_ignored, FileContext, Rule};
 
 const FALLIBLE_FILESYSTEM_CALLS: &[&str] = &[
-    "std::fs::remove_file(",
-    "fs::remove_file(",
-    "std::fs::remove_dir(",
-    "fs::remove_dir(",
-    "std::fs::rename(",
-    "fs::rename(",
-    "std::fs::write(",
-    "fs::write(",
-    "std::fs::create_dir(",
-    "fs::create_dir(",
-    "std::fs::create_dir_all(",
-    "fs::create_dir_all(",
+    "remove_file",
+    "remove_dir",
+    "rename",
+    "write",
+    "create_dir",
+    "create_dir_all",
 ];
 
 pub struct IgnoredFilesystemErrorRule;
@@ -55,33 +50,43 @@ impl Rule for IgnoredFilesystemErrorRule {
             "fs::write",
             "std::fs::create_dir",
             "fs::create_dir",
+            "std::fs::create_dir_all",
+            "fs::create_dir_all",
         ]
     }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
-        ctx.lines()
-            .filter_map(|(line_no, line)| {
-                if is_comment_line(line)
-                    || is_rule_ignored(ctx, line_no, self.id(), self.name(), self.category())
+        let lines: Vec<_> = ctx.lines().collect();
+        collect_invocations(ctx.content)
+            .into_iter()
+            .filter_map(|invocation| {
+                let function = invocation.path.rsplit("::").next()?;
+                if invocation.kind != InvocationKind::Call
+                    || !FALLIBLE_FILESYSTEM_CALLS.contains(&function)
+                    || is_rule_ignored(ctx, invocation.line_no, self.id(), self.name(), self.category())
                 {
                     return None;
                 }
-                let assignment = line.find("let _")?;
-                let after_binding = line[assignment + "let _".len()..].trim_start();
-                let remainder = after_binding.strip_prefix('=')?;
-                if !FALLIBLE_FILESYSTEM_CALLS
+                let line = lines
                     .iter()
-                    .any(|call| remainder.contains(call))
-                {
+                    .find(|(line_no, _)| *line_no == invocation.line_no)
+                    .map(|(_, line)| *line)?;
+                if is_comment_line(line) {
                     return None;
                 }
-                Some(self.finding(
-                    ctx,
-                    line_no,
-                    assignment + 1,
-                    "filesystem operation result is explicitly discarded".to_string(),
-                    line,
-                ))
+                let before_call = line.get(..invocation.column.saturating_sub(1))?;
+                let ignored_binding = before_call.rfind("let _").is_some_and(|binding| {
+                    before_call[binding + "let _".len()..].trim() == "="
+                });
+                ignored_binding.then(|| {
+                    self.finding(
+                        ctx,
+                        invocation.line_no,
+                        invocation.column,
+                        "filesystem operation result is explicitly discarded".to_string(),
+                        line,
+                    )
+                })
             })
             .collect()
     }

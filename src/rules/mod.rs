@@ -497,6 +497,14 @@ fn skip_raw_string_literal(bytes: &[u8], index: usize) -> Option<usize> {
     Some(bytes.len())
 }
 
+fn is_ident_start(byte: u8) -> bool {
+    byte == b'_' || byte.is_ascii_alphabetic()
+}
+
+fn is_ident_continue(byte: u8) -> bool {
+    byte == b'_' || byte.is_ascii_alphanumeric()
+}
+
 #[cfg(test)]
 mod registry_tests {
     use super::all_rules;
@@ -506,12 +514,4 @@ mod registry_tests {
         let ids: Vec<&str> = all_rules().iter().map(|rule| rule.id()).collect();
         assert!(ids.windows(2).all(|pair| pair[0] < pair[1]));
     }
-}
-
-fn is_ident_start(byte: u8) -> bool {
-    byte == b'_' || byte.is_ascii_alphabetic()
-}
-
-fn is_ident_continue(byte: u8) -> bool {
-    byte == b'_' || byte.is_ascii_alphanumeric()
 }

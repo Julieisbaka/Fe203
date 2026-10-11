@@ -88,8 +88,8 @@ fe203 --self-update
 ```
 
 `--self-update` selects the release asset for your current OS/architecture
-when available, replaces the existing binary in place, and starts the updated
-CLI automatically.
+when available, verifies the downloaded binary version, replaces the existing
+binary in place, and exits. It does not restart the original command.
 
 ## Your First Config
 

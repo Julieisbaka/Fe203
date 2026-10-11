@@ -2,6 +2,7 @@
 // fe203-ignore-file FE020, FE022, FE023, FE024
 
 use crate::finding::{Category, Finding, Severity};
+use crate::rules::syntax::{collect_invocations, InvocationKind};
 use crate::rules::{is_comment_line, is_rule_ignored, word_occurrences, FileContext, Rule};
 
 /// Whether the `unsafe` keyword at `idx` is followed by `fn`.
@@ -163,26 +164,34 @@ impl Rule for RiskyApiRule {
     }
 
     fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
-        let mut findings = Vec::new();
-        for (line_no, line) in ctx.lines() {
-            if is_rule_ignored(ctx, line_no, self.id(), self.name(), self.category())
-                || is_comment_line(line)
-            {
-                continue;
-            }
-            for api_name in self.api_names {
-                for idx in word_occurrences(line, api_name) {
-                    findings.push(self.finding(
-                        ctx,
-                        line_no,
-                        idx + 1,
-                        format!("`{api_name}` has significant safety obligations"),
-                        line,
-                    ));
+        let lines: Vec<_> = ctx.lines().collect();
+        collect_invocations(ctx.content)
+            .into_iter()
+            .filter_map(|invocation| {
+                let api = invocation.path.rsplit("::").next()?;
+                if invocation.kind != InvocationKind::Call || !self.api_names.contains(&api) {
+                    return None;
                 }
-            }
-        }
-        findings
+                if is_rule_ignored(ctx, invocation.line_no, self.id(), self.name(), self.category())
+                {
+                    return None;
+                }
+                let line = lines
+                    .iter()
+                    .find(|(line_no, _)| *line_no == invocation.line_no)
+                    .map(|(_, line)| *line)?;
+                if is_comment_line(line) {
+                    return None;
+                }
+                Some(self.finding(
+                    ctx,
+                    invocation.line_no,
+                    invocation.column,
+                    format!("`{}` has significant safety obligations", invocation.path),
+                    line,
+                ))
+            })
+            .collect()
     }
 }
 

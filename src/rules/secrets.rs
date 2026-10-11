@@ -2,7 +2,7 @@
 // fe203-ignore-file FE040, FE041, FE042, FE043, FE044, FE045, FE046, FE047
 
 use crate::finding::{Category, Finding, Severity};
-use crate::rules::syntax::collect_method_chains;
+use crate::rules::syntax::{collect_invocations, collect_method_chains, InvocationKind};
 use crate::rules::{contains_ignore_case, is_comment_line, is_rule_ignored, FileContext, Rule};
 
 const PROVIDER_TOKEN_PREFIXES: &[&str] = &[
@@ -298,34 +298,35 @@ impl Rule for WeakHashRule {
             "md5::compute",
             "Sha1::new",
             "Sha1::digest",
-            "sha1::Sha1::new",
         ];
-        let mut findings = Vec::new();
-        for (line_no, line) in ctx.lines() {
-            if is_rule_ignored(ctx, line_no, self.id(), self.name(), self.category())
-                || is_comment_line(line)
-            {
-                continue;
-            }
-            if let Some(marker) = MARKERS
-                .iter()
-                .find(|marker| contains_ignore_case(line, marker))
-            {
-                findings.push(
-                    self.finding(
-                        ctx,
-                        line_no,
-                        line.to_ascii_lowercase()
-                            .find(&marker.to_ascii_lowercase())
-                            .unwrap_or(0)
-                            + 1,
-                        format!("weak hash construction `{marker}` found"),
-                        line,
-                    ),
-                );
-            }
-        }
-        findings
+        let lines: Vec<_> = ctx.lines().collect();
+        collect_invocations(ctx.content)
+            .into_iter()
+            .filter_map(|invocation| {
+                if invocation.kind != InvocationKind::Call
+                    || !MARKERS
+                        .iter()
+                        .any(|marker| invocation.path.ends_with(marker))
+                    || is_rule_ignored(ctx, invocation.line_no, self.id(), self.name(), self.category())
+                {
+                    return None;
+                }
+                let line = lines
+                    .iter()
+                    .find(|(line_no, _)| *line_no == invocation.line_no)
+                    .map(|(_, line)| *line)?;
+                if is_comment_line(line) {
+                    return None;
+                }
+                Some(self.finding(
+                    ctx,
+                    invocation.line_no,
+                    invocation.column,
+                    format!("weak hash construction `{}` found", invocation.path),
+                    line,
+                ))
+            })
+            .collect()
     }
 }
 

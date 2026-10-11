@@ -1,6 +1,6 @@
 # Fe203 Changelog
 
-## Unreleased
+## `0.3.0`
 
 - Added FE022-FE024 to flag transmute APIs, destructor suppression, and zero-initialized values for manual safety review.
 - Added FE045-FE047 for weak hash usage, disabled TLS validation, and embedded PEM private-key markers.

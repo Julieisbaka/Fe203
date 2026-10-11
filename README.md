@@ -72,8 +72,9 @@ them on untrusted repositories unless you are willing to run that repository's
 build scripts, proc macros, tests, and related Cargo-driven code.
 
 `--self-update` selects the matching release asset for the current OS and
-architecture when one is published. It replaces the existing installed binary
-in place and launches the updated CLI automatically.
+architecture when one is published. It verifies the downloaded binary version,
+replaces the existing binary in place, and exits without restarting the
+original command.
 
 ## Documentation
 
