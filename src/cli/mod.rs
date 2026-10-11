@@ -1,5 +1,4 @@
 //! Minimal std-only CLI argument parsing.
-// fe203-ignore-file FE020
 
 mod parser;
 pub(crate) mod ui;
