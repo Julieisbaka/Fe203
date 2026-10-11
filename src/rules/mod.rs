@@ -6,6 +6,7 @@
 //! 3. (Optional) Add a new [`Category`] if it doesn't fit an existing one.
 
 pub mod debug_code;
+pub mod easter_egg;
 pub mod lint;
 pub mod path_safety;
 pub mod regex_checks;
@@ -125,6 +126,11 @@ pub trait Rule: Sync {
         &[]
     }
 
+    /// Whether this rule should be omitted from the generated rule index.
+    fn is_hidden(&self) -> bool {
+        false
+    }
+
     /// Whether this rule should run for the current file context.
     fn should_scan(&self, ctx: &FileContext) -> bool {
         let signatures = self.prefilter_signatures();
@@ -166,6 +172,7 @@ pub fn all_rules() -> Vec<Box<dyn Rule>> {
     rules.extend(regex_checks::rules());
     rules.extend(shell::rules());
     rules.extend(path_safety::rules());
+    rules.extend(easter_egg::rules());
     rules
 }
 
@@ -181,7 +188,11 @@ pub fn rule_by_id<'a>(rules: &'a [Box<dyn Rule>], id: &str) -> Option<&'a dyn Ru
 pub fn render_rule_index(rules: &[Box<dyn Rule>]) -> String {
     let mut out = String::new();
     out.push_str("Generated Fe203 rule index\n\n");
-    for rule in rules.iter().map(|rule| rule.as_ref()) {
+    for rule in rules
+        .iter()
+        .map(|rule| rule.as_ref())
+        .filter(|rule| !rule.is_hidden())
+    {
         out.push_str(&format!(
             "{:<6} {:<8} {:<8} {}\n      {}\n",
             rule.id(),

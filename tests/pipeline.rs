@@ -172,3 +172,25 @@ fn config_disables_categories_and_rules() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn easter_egg_rule_runs_through_the_full_pipeline() {
+    let dir = fixture_dir("easter-egg");
+    std::fs::write(dir.join("fixture.rs"), "// fe203-easter-egg\n").unwrap();
+
+    let registry = all_rules();
+    let rules: Vec<&dyn Rule> = registry.iter().map(|r| r.as_ref()).collect();
+    let mut files = Vec::new();
+    discover_files(
+        &dir,
+        &Config::default().exclude,
+        &Config::default().include,
+        &mut files,
+    );
+    let findings = scan_files(&files, &rules, true);
+
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].rule_id, "FE203");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

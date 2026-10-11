@@ -10,10 +10,10 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-#[cfg(unix)]
-use platform::{launch_updated_binary, replace_binary_in_place_unix};
 #[cfg(windows)]
 use platform::schedule_windows_replace_and_launch;
+#[cfg(unix)]
+use platform::{launch_updated_binary, replace_binary_in_place_unix};
 use release::latest_release_info;
 use transfer::{download_release_asset, extract_archive, find_file_recursively};
 use types::SemverTriplet;

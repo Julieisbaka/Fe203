@@ -14,7 +14,7 @@ mod tests {
 
     fn scan_all(content: &str) -> Vec<Finding> {
         let ctx = FileContext::new(Path::new("test.rs"), content);
-        vec![
+        [
             Box::new(UnusedVariableRule) as Box<dyn Rule>,
             Box::new(UnusedConstantRule),
         ]
@@ -73,18 +73,15 @@ mod tests {
 
     #[test]
     fn detects_unused_nested_tuple_struct_and_enum_pattern_binding() {
-        let findings = scan_all(
-            "let Some(Foo(inner, used)) = value;\nprintln!(\"{}\", used);\n",
-        );
+        let findings = scan_all("let Some(Foo(inner, used)) = value;\nprintln!(\"{}\", used);\n");
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("inner"));
     }
 
     #[test]
     fn keeps_used_binding_with_raw_string_initializer() {
-        let findings = scan_all(
-            "let value = r#\"; not the end { }\"#;\nprintln!(\"{}\", value);\n",
-        );
+        let findings =
+            scan_all("let value = r#\"; not the end { }\"#;\nprintln!(\"{}\", value);\n");
         assert!(findings.is_empty());
     }
 

@@ -32,10 +32,10 @@ pub(super) fn download_release_asset(url: &str, output_path: &Path) -> Result<()
         }
 
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!(
+        Err(format!(
             "failed to download release asset: {}",
             stderr.trim()
-        ));
+        ))
     }
 
     #[cfg(unix)]

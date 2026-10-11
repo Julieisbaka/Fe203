@@ -1,6 +1,6 @@
 use crate::finding::{Category, Finding, Severity};
-use crate::rules::{is_comment_line, is_rule_ignored, FileContext, Rule};
 use crate::rules::syntax::{collect_invocations, extract_annotated_functions, InvocationKind};
+use crate::rules::{is_comment_line, is_rule_ignored, FileContext, Rule};
 
 const TEST_ATTR_MARKERS: &[&str] = &[
     "#[test]",
@@ -59,7 +59,11 @@ impl Rule for UnwrapExpectRule {
             {
                 continue;
             }
-            let method = invocation.path.rsplit('.').next().unwrap_or(invocation.path);
+            let method = invocation
+                .path
+                .rsplit('.')
+                .next()
+                .unwrap_or(invocation.path);
             if !matches!(method, "unwrap" | "expect" | "unwrap_err" | "expect_err") {
                 continue;
             }
@@ -68,8 +72,13 @@ impl Rule for UnwrapExpectRule {
                 .lines()
                 .nth(invocation.line_no.saturating_sub(1))
                 .unwrap_or("");
-            if is_rule_ignored(ctx, invocation.line_no, self.id(), self.name(), self.category())
-                || is_comment_line(line)
+            if is_rule_ignored(
+                ctx,
+                invocation.line_no,
+                self.id(),
+                self.name(),
+                self.category(),
+            ) || is_comment_line(line)
             {
                 continue;
             }
@@ -134,7 +143,11 @@ impl Rule for ErrorErasureRule {
             {
                 continue;
             }
-            let method = invocation.path.rsplit('.').next().unwrap_or(invocation.path);
+            let method = invocation
+                .path
+                .rsplit('.')
+                .next()
+                .unwrap_or(invocation.path);
             if !matches!(method, "map_err" | "or_else") {
                 continue;
             }
@@ -149,8 +162,13 @@ impl Rule for ErrorErasureRule {
                 .lines()
                 .nth(invocation.line_no.saturating_sub(1))
                 .unwrap_or("");
-            if is_rule_ignored(ctx, invocation.line_no, self.id(), self.name(), self.category())
-                || is_comment_line(line)
+            if is_rule_ignored(
+                ctx,
+                invocation.line_no,
+                self.id(),
+                self.name(),
+                self.category(),
+            ) || is_comment_line(line)
             {
                 continue;
             }
@@ -220,15 +238,15 @@ mod tests {
 
     #[test]
     fn detects_multiline_unwrap_outside_tests() {
-        let findings = scan_all("fn load() {\n    let cfg = read_config()\n        .unwrap();\n}\n");
+        let findings =
+            scan_all("fn load() {\n    let cfg = read_config()\n        .unwrap();\n}\n");
         assert!(findings.iter().any(|finding| finding.rule_id == "FE076"));
     }
 
     #[test]
     fn ignores_unwrap_in_strings_and_comments() {
-        let findings = scan_all(
-            "fn load() {\n    let _ = \".unwrap()\";\n    // .expect(\"x\")\n}\n",
-        );
+        let findings =
+            scan_all("fn load() {\n    let _ = \".unwrap()\";\n    // .expect(\"x\")\n}\n");
         assert!(findings.is_empty());
     }
 
