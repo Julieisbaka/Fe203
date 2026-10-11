@@ -1,8 +1,8 @@
 ---
-agent: "agent"
+name: add-fe-rule-end-to-end
 description: "Add a new FE rule end-to-end: implement rule, register it, add tests, and update docs/changelog."
+disable-model-invocation: true
 ---
-
 # Add FE Rule End-to-End
 
 Add one new FE rule to FE203 and complete all required updates.
