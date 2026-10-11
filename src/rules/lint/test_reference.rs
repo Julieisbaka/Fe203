@@ -1,6 +1,6 @@
 use crate::finding::{Category, Finding, Severity};
-use crate::rules::{is_rule_ignored, FileContext, Rule};
 use crate::rules::syntax::{collect_invocations, extract_annotated_functions, InvocationKind};
+use crate::rules::{is_rule_ignored, FileContext, Rule};
 
 /// Detects test-bearing files that do not appear to reference product code.
 pub struct TestWithoutProductReferenceRule;
@@ -46,7 +46,10 @@ impl Rule for TestWithoutProductReferenceRule {
         if is_rule_ignored(ctx, line_no, self.id(), self.name(), self.category()) {
             return Vec::new();
         }
-        if test_functions.iter().any(|test_fn| has_product_reference(test_fn.body)) {
+        if test_functions
+            .iter()
+            .any(|test_fn| has_product_reference(test_fn.body))
+        {
             return Vec::new();
         }
         let snippet = ctx
@@ -216,15 +219,13 @@ fn extract_test_functions(content: &str) -> Vec<TestFunction<'_>> {
 
 fn contains_assert_macro(body: &str) -> bool {
     collect_invocations(body).into_iter().any(|invocation| {
-        invocation.kind == InvocationKind::Macro
-            && ASSERT_MACROS.iter().any(|name| *name == invocation.path)
+        invocation.kind == InvocationKind::Macro && ASSERT_MACROS.contains(&invocation.path)
     })
 }
 
 fn assert_only_expression_style(body: &str) -> bool {
     collect_invocations(body).into_iter().all(|invocation| {
-        invocation.kind == InvocationKind::Macro
-            && ASSERT_MACROS.iter().any(|allowed| *allowed == invocation.path)
+        invocation.kind == InvocationKind::Macro && ASSERT_MACROS.contains(&invocation.path)
     })
 }
 
@@ -282,7 +283,7 @@ mod tests {
 
     fn scan_with_rules(content: &str) -> Vec<Finding> {
         let ctx = FileContext::new(Path::new("test.rs"), content);
-        vec![
+        [
             Box::new(TestWithoutProductReferenceRule) as Box<dyn Rule>,
             Box::new(AssertOnlyTestsWithoutProductCallsRule),
             Box::new(TestWithoutAssertionsRule),
@@ -298,8 +299,8 @@ mod tests {
             "#[test]\nfn t() {\n    let _ = \"crate::fake()\";\n    // crate::fake()\n    assert_eq!(2, 1 + 1);\n}\n",
         );
         let ids: Vec<&str> = findings.iter().map(|finding| finding.rule_id).collect();
-        assert!(ids.iter().any(|id| *id == "FE065"));
-        assert!(ids.iter().any(|id| *id == "FE075"));
+        assert!(ids.contains(&"FE065"));
+        assert!(ids.contains(&"FE075"));
     }
 
     #[test]
@@ -320,9 +321,7 @@ mod tests {
 
     #[test]
     fn flags_product_call_without_assertion() {
-        let findings = scan_with_rules(
-            "#[test]\nfn t() {\n    crate::parser::parse(\"x\");\n}\n",
-        );
+        let findings = scan_with_rules("#[test]\nfn t() {\n    crate::parser::parse(\"x\");\n}\n");
         assert!(findings.iter().any(|finding| finding.rule_id == "FE078"));
     }
 }

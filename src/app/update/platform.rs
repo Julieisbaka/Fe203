@@ -1,11 +1,12 @@
 use std::path::Path;
+#[cfg(windows)]
 use std::process::Command;
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
 #[cfg(windows)]
-pub(super) fn schedule_windows_replace_and_launch(
+pub(super) fn schedule_windows_replace(
     current_exe: &Path,
     replacement_binary: &Path,
     temp_dir: &Path,
@@ -37,17 +38,21 @@ for($i=0;$i -lt $retries;$i++){{\
 }};\
     try{{\
   Copy-Item -LiteralPath '{replacement}' -Destination '{current}' -Force;\
-  & '{current}' --version;\
-  Remove-Item -Path $oldExe -Force -ErrorAction SilentlyContinue;\
-  Remove-Item -Path '{temp_dir}' -Recurse -Force -ErrorAction SilentlyContinue;\
-}}catch{{\
-  $null=Move-Item -LiteralPath $oldExe -Destination '{current}' -Force -ErrorAction SilentlyContinue;\
-  throw;\
-}};",
-        pid = pid,
-        replacement = ps_single_quote_escape(&replacement_binary.to_string_lossy()),
-        current = ps_single_quote_escape(&current_exe.to_string_lossy()),
-        temp_dir = ps_single_quote_escape(&temp_dir.to_string_lossy()),
+      $versionOutput=(& '{current}' --version 2>&1 | Out-String).Trim();\
+      if($LASTEXITCODE -ne 0 -or $versionOutput -ne '{expected_version}'){{throw \"updated binary verification failed: $versionOutput\"}};\
+      Remove-Item -Path $oldExe -Force -ErrorAction SilentlyContinue;\
+      Remove-Item -Path '{temp_dir}' -Recurse -Force -ErrorAction SilentlyContinue;\
+    }}catch{{\
+      Remove-Item -LiteralPath '{current}' -Force -ErrorAction SilentlyContinue;\
+      if(Test-Path -LiteralPath $oldExe){{Move-Item -LiteralPath $oldExe -Destination '{current}' -Force}};\
+      Remove-Item -Path '{temp_dir}' -Recurse -Force -ErrorAction SilentlyContinue;\
+      throw;\
+    }};",
+            pid = pid,
+            replacement = ps_single_quote_escape(&replacement_binary.to_string_lossy()),
+            current = ps_single_quote_escape(&current_exe.to_string_lossy()),
+            temp_dir = ps_single_quote_escape(&temp_dir.to_string_lossy()),
+            expected_version = ps_single_quote_escape(&format!("fe203 {version_text}")),
     );
 
     Command::new("powershell")
@@ -75,36 +80,55 @@ pub(super) fn replace_binary_in_place_unix(
     // update (potentially owned by a different user) does not block this attempt.
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
+        .map_err(|err| format!("system clock error while staging update: {err}"))?
+        .as_nanos();
     let staging_name = format!(".fe203-update-{}-{nanos}", std::process::id());
     let replacement_path = current_exe
         .parent()
         .ok_or_else(|| "current executable has no parent directory".to_string())?
         .join(staging_name);
 
-    std::fs::copy(replacement_binary, &replacement_path)
-        .map_err(|err| format!("failed to stage replacement binary: {err}"))?;
+    if let Err(err) = std::fs::copy(replacement_binary, &replacement_path) {
+        return Err(cleanup_staging_file(
+            &replacement_path,
+            format!("failed to stage replacement binary: {err}"),
+        ));
+    }
 
-    if let Ok(existing_meta) = std::fs::metadata(current_exe) {
-        let mode = existing_meta.permissions().mode();
-        let _ = std::fs::set_permissions(&replacement_path, std::fs::Permissions::from_mode(mode));
+    let existing_meta = match std::fs::metadata(current_exe) {
+        Ok(metadata) => metadata,
+        Err(err) => {
+            return Err(cleanup_staging_file(
+                &replacement_path,
+                format!("failed to inspect current executable permissions: {err}"),
+            ));
+        }
+    };
+    let mode = existing_meta.permissions().mode();
+    if let Err(err) =
+        std::fs::set_permissions(&replacement_path, std::fs::Permissions::from_mode(mode))
+    {
+        return Err(cleanup_staging_file(
+            &replacement_path,
+            format!("failed to preserve executable permissions: {err}"),
+        ));
     }
 
     std::fs::rename(&replacement_path, current_exe).map_err(|err| {
-        let _ = std::fs::remove_file(&replacement_path);
-        format!("failed to replace current executable: {err}")
+        cleanup_staging_file(
+            &replacement_path,
+            format!("failed to replace current executable: {err}"),
+        )
     })
 }
 
 #[cfg(unix)]
-pub(super) fn launch_updated_binary(exe: &Path) -> Result<i32, String> {
-    let status = Command::new(exe)
-        .arg("--version")
-        .status()
-        .map_err(|err| format!("updated binary installed but failed to launch: {err}"))?;
-
-    Ok(status.code().unwrap_or(1))
+fn cleanup_staging_file(path: &Path, original_error: String) -> String {
+    match std::fs::remove_file(path) {
+        Ok(()) => original_error,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => original_error,
+        Err(error) => format!("{original_error}; failed to remove staging file: {error}"),
+    }
 }
 
 #[cfg(windows)]

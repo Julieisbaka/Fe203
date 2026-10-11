@@ -48,7 +48,7 @@ mod tests {
         )
         .unwrap();
 
-        let targets = expand_manifest_targets(&[dir.clone()]);
+        let targets = expand_manifest_targets(std::slice::from_ref(&dir));
         assert!(targets
             .iter()
             .any(|p| p.ends_with("crates/a") || p.ends_with("crates\\a")));

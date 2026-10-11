@@ -66,7 +66,10 @@ impl Rule for IgnoredProductResultRule {
                 ctx,
                 chain.line_no,
                 chain.column,
-                format!("result of product call `{}` is silently dropped", chain.root),
+                format!(
+                    "result of product call `{}` is silently dropped",
+                    chain.root
+                ),
                 snippet,
             ));
         }
@@ -133,8 +136,9 @@ mod tests {
 
     #[test]
     fn respects_ignore_comments() {
-        let findings =
-            scan_all("fn run() {\n    // fe203-ignore FE079\n    crate::parser::parse(\"x\");\n}\n");
+        let findings = scan_all(
+            "fn run() {\n    // fe203-ignore FE079\n    crate::parser::parse(\"x\");\n}\n",
+        );
         assert!(findings.is_empty());
     }
 }

@@ -34,7 +34,13 @@ pub(crate) fn extract_annotated_functions<'a>(
                 idx = attr_end;
             }
             b'"' => idx = skip_string_literal(bytes, idx + 1, b'"'),
-            b'\'' => idx = skip_char_literal(bytes, idx + 1),
+            b'\'' => {
+                if let Some(end) = char_literal_end(bytes, idx) {
+                    idx = end;
+                } else {
+                    idx += 1;
+                }
+            }
             b'r' => {
                 if let Some(end) = skip_raw_string_literal(bytes, idx) {
                     idx = end;
@@ -216,6 +222,21 @@ fn parse_invocation_from<'a>(
     while after < bytes.len() && bytes[after].is_ascii_whitespace() {
         after += 1;
     }
+    if after + 1 < bytes.len() && bytes[after] == b':' && bytes[after + 1] == b':' {
+        let mut generic_start = after + 2;
+        while generic_start < bytes.len() && bytes[generic_start].is_ascii_whitespace() {
+            generic_start += 1;
+        }
+        if bytes.get(generic_start) == Some(&b'<') {
+            let Some(generic_end) = skip_generic_arguments(bytes, generic_start) else {
+                return end;
+            };
+            after = generic_end;
+            while after < bytes.len() && bytes[after].is_ascii_whitespace() {
+                after += 1;
+            }
+        }
+    }
     if after >= bytes.len() {
         return end;
     }
@@ -251,4 +272,52 @@ fn parse_invocation_from<'a>(
         }
         _ => end,
     }
+}
+
+fn skip_generic_arguments(bytes: &[u8], start: usize) -> Option<usize> {
+    let mut depth = 0usize;
+    let mut idx = start;
+    while idx < bytes.len() {
+        if idx + 1 < bytes.len() && bytes[idx] == b'/' && bytes[idx + 1] == b'/' {
+            idx = skip_line_comment(bytes, idx + 2);
+            continue;
+        }
+        if idx + 1 < bytes.len() && bytes[idx] == b'/' && bytes[idx + 1] == b'*' {
+            idx = skip_block_comment(bytes, idx + 2);
+            continue;
+        }
+        match bytes[idx] {
+            b'"' => idx = skip_string_literal(bytes, idx + 1, b'"'),
+            b'\'' => idx = skip_char_literal(bytes, idx + 1),
+            b'<' => {
+                depth += 1;
+                idx += 1;
+            }
+            b'>' => {
+                depth = depth.checked_sub(1)?;
+                idx += 1;
+                if depth == 0 {
+                    return Some(idx);
+                }
+            }
+            _ => idx += 1,
+        }
+    }
+    None
+}
+
+fn char_literal_end(bytes: &[u8], start: usize) -> Option<usize> {
+    let next = *bytes.get(start + 1)?;
+    let quote_idx = if next == b'\\' {
+        if bytes.get(start + 2) == Some(&b'u') && bytes.get(start + 3) == Some(&b'{') {
+            let close = bytes[start + 4..].iter().position(|byte| *byte == b'}')? + start + 4;
+            close + 1
+        } else {
+            start + 3
+        }
+    } else {
+        let rest = std::str::from_utf8(bytes.get(start + 1..)?).ok()?;
+        start + 1 + rest.chars().next()?.len_utf8()
+    };
+    (bytes.get(quote_idx) == Some(&b'\'')).then_some(quote_idx + 1)
 }

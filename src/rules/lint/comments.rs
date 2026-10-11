@@ -13,8 +13,9 @@ impl Rule for EmptyDocCommentRule {
         "empty-doc-comment"
     }
 
+    // IDK I wanted to add an empty comment here, because I thought it would be funny.
     fn description(&self) -> &'static str {
-        "empty doc comments add noise without documenting behavior"
+        "empty doc comments add noise without documenting behavior" //
     }
 
     fn category(&self) -> Category {

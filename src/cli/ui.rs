@@ -139,7 +139,7 @@ fn terminal_profile_from_env(stdout_terminal: bool, stderr_terminal: bool) -> Te
     let cols = std::env::var("COLUMNS")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
-        .unwrap_or_else(|| if redirected_stdout { 80 } else { 100 });
+        .unwrap_or(if redirected_stdout { 80 } else { 100 });
 
     let ascii_only =
         ascii_env || dumb || redirected_stdout || (cfg!(windows) && !modern_windows_terminal);

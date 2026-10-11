@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 mod json_scan;
@@ -11,9 +12,9 @@ mod types;
 mod tests;
 
 #[cfg(unix)]
-use platform::{launch_updated_binary, replace_binary_in_place_unix};
+use platform::replace_binary_in_place_unix;
 #[cfg(windows)]
-use platform::schedule_windows_replace_and_launch;
+use platform::schedule_windows_replace;
 use release::latest_release_info;
 use transfer::{download_release_asset, extract_archive, find_file_recursively};
 use types::SemverTriplet;
@@ -87,17 +88,30 @@ fn perform_self_update(current_version: &str) -> Result<i32, String> {
 
     let tmp = make_temp_update_dir()?;
     let archive_path = tmp.join(release.archive_file_name());
-    download_release_asset(&release.asset_url, &archive_path)?;
-    extract_archive(&archive_path, &tmp, release.archive_kind)?;
-
-    let extracted_binary = find_file_recursively(&tmp, release.binary_name)
-        .ok_or_else(|| format!("downloaded archive did not contain {}", release.binary_name))?;
+    let prepared_binary = (|| {
+        download_release_asset(&release.asset_url, &archive_path)?;
+        extract_archive(&archive_path, &tmp, release.archive_kind)?;
+        let extracted_binary = find_file_recursively(&tmp, release.binary_name)
+            .ok_or_else(|| format!("downloaded archive did not contain {}", release.binary_name))?;
+        verify_binary_version(&extracted_binary, &release.version_text)?;
+        Ok::<_, String>(extracted_binary)
+    })();
+    let extracted_binary = match prepared_binary {
+        Ok(binary) => binary,
+        Err(error) => {
+            return Err(cleanup_temp_dir_error(&tmp, error));
+        }
+    };
 
     #[cfg(windows)]
     {
-        schedule_windows_replace_and_launch(&exe, &extracted_binary, &tmp, &release.version_text)?;
+        if let Err(error) =
+            schedule_windows_replace(&exe, &extracted_binary, &tmp, &release.version_text)
+        {
+            return Err(cleanup_temp_dir_error(&tmp, error));
+        }
         println!(
-            "updating to {}. The new version will launch automatically when this command exits.",
+            "update to {} scheduled; the new binary was verified before replacement.",
             release.version_text
         );
         Ok(0)
@@ -105,10 +119,55 @@ fn perform_self_update(current_version: &str) -> Result<i32, String> {
 
     #[cfg(unix)]
     {
-        replace_binary_in_place_unix(&exe, &extracted_binary)?;
-        let _ = std::fs::remove_dir_all(&tmp);
+        if let Err(error) = replace_binary_in_place_unix(&exe, &extracted_binary) {
+            return Err(cleanup_temp_dir_error(&tmp, error));
+        }
+        std::fs::remove_dir_all(&tmp).map_err(|error| {
+            format!("updated binary but failed to remove temporary files: {error}")
+        })?;
         println!("updated to {}", release.version_text);
-        launch_updated_binary(&exe)
+        Ok(0)
+    }
+}
+
+fn verify_binary_version(binary: &Path, expected_version: &str) -> Result<(), String> {
+    let output = Command::new(binary)
+        .arg("--version")
+        .output()
+        .map_err(|error| format!("failed to verify downloaded binary: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "downloaded binary version check failed (exit {:?}): {}",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    let stdout = String::from_utf8(output.stdout)
+        .map_err(|_| "downloaded binary version output was not valid UTF-8".to_string())?;
+    if binary_version_matches(&stdout, expected_version) {
+        return Ok(());
+    }
+    let expected_output = format!("fe203 {expected_version}");
+    Err(format!(
+        "downloaded binary reported an unexpected version; expected `{expected_output}`, got `{}`",
+        stdout.trim()
+    ))
+}
+
+fn binary_version_matches(stdout: &str, expected_version: &str) -> bool {
+    let expected_output = format!("fe203 {expected_version}");
+    stdout.lines().any(|line| line.trim() == expected_output)
+}
+
+fn cleanup_temp_dir_error(path: &Path, original_error: String) -> String {
+    match std::fs::remove_dir_all(path) {
+        Ok(()) => original_error,
+        Err(cleanup_error) if cleanup_error.kind() == std::io::ErrorKind::NotFound => {
+            original_error
+        }
+        Err(cleanup_error) => format!(
+            "{original_error}; also failed to clean temporary update files: {cleanup_error}"
+        ),
     }
 }
 
@@ -121,7 +180,10 @@ fn make_temp_update_dir() -> Result<PathBuf, String> {
     let base = std::fs::canonicalize(&base)
         .map_err(|err| format!("failed to resolve temp dir '{}': {err}", base.display()))?;
     if !base.is_absolute() {
-        return Err(format!("temp directory is not absolute: {}", base.display()));
+        return Err(format!(
+            "temp directory is not absolute: {}",
+            base.display()
+        ));
     }
     if base
         .components()
@@ -138,16 +200,35 @@ fn make_temp_update_dir() -> Result<PathBuf, String> {
 }
 
 fn parse_semver_triplet(version_text: &str) -> Option<SemverTriplet> {
-    let core = version_text
-        .trim()
-        .trim_start_matches('v')
-        .split(['-', '+'])
-        .next()?;
+    let trimmed = version_text.trim();
+    let without_prefix = trimmed.strip_prefix('v').unwrap_or(trimmed);
+    if without_prefix.is_empty() {
+        return None;
+    }
+    let (without_build, build) = match without_prefix.split_once('+') {
+        Some((version, build)) if !build.is_empty() && !build.contains('+') => {
+            (version, Some(build))
+        }
+        Some(_) => return None,
+        None => (without_prefix, None),
+    };
+    if build.is_some_and(|metadata| !valid_semver_identifiers(metadata, false)) {
+        return None;
+    }
+    let (core, prerelease) = match without_build.split_once('-') {
+        Some((core, prerelease))
+            if !prerelease.is_empty() && valid_semver_identifiers(prerelease, true) =>
+        {
+            (core, Some(prerelease.to_string()))
+        }
+        Some(_) => return None,
+        None => (without_build, None),
+    };
 
     let mut parts = core.split('.');
-    let major = parts.next()?.parse::<u64>().ok()?;
-    let minor = parts.next()?.parse::<u64>().ok()?;
-    let patch = parts.next()?.parse::<u64>().ok()?;
+    let major = parse_semver_number(parts.next()?)?;
+    let minor = parse_semver_number(parts.next()?)?;
+    let patch = parse_semver_number(parts.next()?)?;
 
     if parts.next().is_some() {
         return None;
@@ -157,6 +238,27 @@ fn parse_semver_triplet(version_text: &str) -> Option<SemverTriplet> {
         major,
         minor,
         patch,
+        prerelease,
+    })
+}
+
+fn parse_semver_number(input: &str) -> Option<u64> {
+    if input.is_empty() || (input.len() > 1 && input.starts_with('0')) {
+        return None;
+    }
+    input.parse().ok()
+}
+
+fn valid_semver_identifiers(input: &str, reject_numeric_leading_zero: bool) -> bool {
+    input.split('.').all(|identifier| {
+        !identifier.is_empty()
+            && identifier
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+            && !(reject_numeric_leading_zero
+                && identifier.bytes().all(|byte| byte.is_ascii_digit())
+                && identifier.len() > 1
+                && identifier.starts_with('0'))
     })
 }
 

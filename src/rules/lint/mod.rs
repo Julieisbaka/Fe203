@@ -5,6 +5,7 @@
 mod clamp;
 mod comments;
 mod fallible;
+mod ignored_error;
 mod ignored_result;
 pub(crate) mod suppressions;
 mod test_reference;
@@ -13,11 +14,12 @@ mod unused;
 use crate::rules::Rule;
 use clamp::ClampLikePatternRule;
 use comments::{EmptyCommentRule, EmptyDocCommentRule};
+use ignored_error::IgnoredFilesystemErrorRule;
 use ignored_result::IgnoredProductResultRule;
 use suppressions::DeadSuppressionCommentRule;
 use test_reference::{
-    AssertOnlyTestsWithoutProductCallsRule, TestWithoutProductReferenceRule,
-    TestWithoutAssertionsRule,
+    AssertOnlyTestsWithoutProductCallsRule, TestWithoutAssertionsRule,
+    TestWithoutProductReferenceRule,
 };
 use unused::{UnusedConstantRule, UnusedVariableRule};
 
@@ -34,6 +36,7 @@ pub fn rules() -> Vec<Box<dyn Rule>> {
         Box::new(AssertOnlyTestsWithoutProductCallsRule),
         Box::new(TestWithoutAssertionsRule),
         Box::new(IgnoredProductResultRule),
+        Box::new(IgnoredFilesystemErrorRule),
     ];
     rules.extend(fallible::rules());
     rules
@@ -143,7 +146,7 @@ mod tests {
     fn detects_test_missing_product_ref() {
         let findings = scan_all("#[test]\nfn t() { assert_eq!(2, 1 + 1); }\n");
         let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
-        assert!(ids.iter().any(|id| *id == "FE065"));
+        assert!(ids.contains(&"FE065"));
     }
 
     #[test]
@@ -192,7 +195,7 @@ mod tests {
     fn flags_assert_only_test_missing_calls() {
         let findings = scan_all("#[test]\nfn trivial() { assert_eq!(2, 1 + 1); }\n");
         let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
-        assert!(ids.iter().any(|id| *id == "FE075"));
+        assert!(ids.contains(&"FE075"));
     }
 
     #[test]
@@ -207,6 +210,6 @@ mod tests {
     fn flags_test_with_product_call_but_no_assert() {
         let findings = scan_all("#[test]\nfn smoke() { crate::parser::parse(\"x\"); }\n");
         let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
-        assert!(ids.iter().any(|id| *id == "FE078"));
+        assert!(ids.contains(&"FE078"));
     }
 }

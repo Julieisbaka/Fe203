@@ -1,15 +1,71 @@
 pub(super) fn find_asset_download_url(json: &str, names: &[&str]) -> Option<String> {
-    for name in names {
-        let mut cursor = 0usize;
-        while let Some((asset_name, next_pos)) = find_next_key_value(json, "name", cursor) {
-            if asset_name == *name {
-                if let Some((download_url, _)) =
-                    find_next_key_value(json, "browser_download_url", next_pos)
-                {
-                    return Some(download_url);
+    let key = json.find("\"assets\"")?;
+    let after_key = json.get(key + "\"assets\"".len()..)?;
+    let colon = after_key.find(':')?;
+    let mut cursor = key + "\"assets\"".len() + colon + 1;
+    let bytes = json.as_bytes();
+
+    while bytes.get(cursor).is_some_and(u8::is_ascii_whitespace) {
+        cursor += 1;
+    }
+    if bytes.get(cursor) != Some(&b'[') {
+        return None;
+    }
+    cursor += 1;
+
+    loop {
+        while bytes
+            .get(cursor)
+            .is_some_and(|byte| byte.is_ascii_whitespace() || *byte == b',')
+        {
+            cursor += 1;
+        }
+        match bytes.get(cursor)? {
+            b']' => return None,
+            b'{' => {
+                let end = matching_json_object_end(json, cursor)?;
+                let asset = &json[cursor..end];
+                let asset_name = extract_json_string_field(asset, "name")?;
+                if names.contains(&asset_name.as_str()) {
+                    return extract_json_string_field(asset, "browser_download_url");
+                }
+                cursor = end;
+            }
+            _ => return None,
+        }
+    }
+}
+
+fn matching_json_object_end(json: &str, start: usize) -> Option<usize> {
+    let bytes = json.as_bytes();
+    if bytes.get(start) != Some(&b'{') {
+        return None;
+    }
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+
+    for (idx, &byte) in bytes.iter().enumerate().skip(start) {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match byte {
+            b'"' => in_string = true,
+            b'{' => depth += 1,
+            b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(idx + 1);
                 }
             }
-            cursor = next_pos;
+            _ => {}
         }
     }
     None

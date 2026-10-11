@@ -23,12 +23,13 @@ pub(super) fn latest_release_info() -> Result<ReleaseInfo, String> {
 fn fetch_latest_release_json() -> Result<String, String> {
     #[cfg(windows)]
     {
-        let repo = super::parse_github_repo_slug(env!("CARGO_PKG_REPOSITORY")).ok_or_else(|| {
-            format!(
-                "cannot derive GitHub owner/repo from CARGO_PKG_REPOSITORY: {}",
-                env!("CARGO_PKG_REPOSITORY")
-            )
-        })?;
+        let repo =
+            super::parse_github_repo_slug(env!("CARGO_PKG_REPOSITORY")).ok_or_else(|| {
+                format!(
+                    "cannot derive GitHub owner/repo from CARGO_PKG_REPOSITORY: {}",
+                    env!("CARGO_PKG_REPOSITORY")
+                )
+            })?;
 
         let script = format!(
             "$ErrorActionPreference='Stop';$repo='{repo}';Invoke-RestMethod -Headers @{{'User-Agent'='fe203'}} -Uri (\"https://api.github.com/repos/$repo/releases/latest\") | ConvertTo-Json -Depth 100;",
@@ -56,18 +57,19 @@ fn fetch_latest_release_json() -> Result<String, String> {
             ));
         }
 
-        return String::from_utf8(output.stdout)
-            .map_err(|_| "latest release response was not valid UTF-8".to_string());
+        String::from_utf8(output.stdout)
+            .map_err(|_| "latest release response was not valid UTF-8".to_string())
     }
 
     #[cfg(unix)]
     {
-        let repo = super::parse_github_repo_slug(env!("CARGO_PKG_REPOSITORY")).ok_or_else(|| {
-            format!(
-                "cannot derive GitHub owner/repo from CARGO_PKG_REPOSITORY: {}",
-                env!("CARGO_PKG_REPOSITORY")
-            )
-        })?;
+        let repo =
+            super::parse_github_repo_slug(env!("CARGO_PKG_REPOSITORY")).ok_or_else(|| {
+                format!(
+                    "cannot derive GitHub owner/repo from CARGO_PKG_REPOSITORY: {}",
+                    env!("CARGO_PKG_REPOSITORY")
+                )
+            })?;
         let url = format!("https://api.github.com/repos/{repo}/releases/latest");
 
         let output = Command::new("curl")
@@ -91,7 +93,8 @@ fn fetch_latest_release_json() -> Result<String, String> {
 
 pub(super) fn parse_latest_release_json(json: &str, spec: TargetAssetSpec) -> Option<ReleaseInfo> {
     let tag = extract_json_string_field(json, "tag_name")?;
-    let tag_no_v = tag.trim().trim_start_matches('v').to_string();
+    let tag = tag.trim();
+    let tag_no_v = tag.strip_prefix('v').unwrap_or(tag).to_string();
     let version = super::parse_semver_triplet(&tag_no_v)?;
 
     let expected_a = format!("fe203-v{}-{}", tag_no_v, spec.suffix);

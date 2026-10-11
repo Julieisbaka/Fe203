@@ -64,7 +64,7 @@ fe203 --check-syntax # runs cargo check; unsafe on untrusted repos
 fe203 --max          # runs cargo check + cargo test + all rules; unsafe on untrusted repos
 fe203 --list-rules   # print the built-in rule index
 fe203 --check-update # check GitHub Releases for a newer version
-fe203 --self-update  # update from latest release binary (Windows x86_64)
+fe203 --self-update  # install the latest supported release binary
 ```
 
 `--check-syntax` and `--max` invoke Cargo on the target project. Do not use
@@ -72,8 +72,9 @@ them on untrusted repositories unless you are willing to run that repository's
 build scripts, proc macros, tests, and related Cargo-driven code.
 
 `--self-update` selects the matching release asset for the current OS and
-architecture when one is published. It replaces the existing installed binary
-in place and launches the updated CLI automatically.
+architecture when one is published. It verifies the downloaded binary version,
+replaces the existing binary in place, and exits without restarting the
+original command.
 
 ## Documentation
 

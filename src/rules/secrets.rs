@@ -1,9 +1,9 @@
-//! Simple hardcoded-secret rules: assignments of string literals to
-//! password/api-key/secret-like identifiers and credential URLs.
-// fe203-ignore-file FE040, FE041, FE042, FE043, FE044
+//! Secret and common security-misconfiguration rules.
+// fe203-ignore-file FE040, FE041, FE042, FE043, FE044, FE045, FE046, FE047
 
 use crate::finding::{Category, Finding, Severity};
-use crate::rules::{contains_ignore_case, is_rule_ignored, FileContext, Rule};
+use crate::rules::syntax::{collect_invocations, collect_method_chains, InvocationKind};
+use crate::rules::{contains_ignore_case, is_comment_line, is_rule_ignored, FileContext, Rule};
 
 const PROVIDER_TOKEN_PREFIXES: &[&str] = &[
     "ghp_",
@@ -260,6 +260,200 @@ impl Rule for SecretAssignmentRule {
     }
 }
 
+struct WeakHashRule;
+
+impl Rule for WeakHashRule {
+    fn id(&self) -> &'static str {
+        "FE045"
+    }
+
+    fn name(&self) -> &'static str {
+        "weak-cryptographic-hash"
+    }
+
+    fn description(&self) -> &'static str {
+        "MD5 and SHA-1 are not suitable when collision resistance is required"
+    }
+
+    fn category(&self) -> Category {
+        Category::Secrets
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Warning
+    }
+
+    fn suggestion(&self) -> Option<&'static str> {
+        Some("Use a modern collision-resistant hash, or a dedicated password-hashing algorithm for passwords.")
+    }
+
+    fn prefilter_signatures(&self) -> &'static [&'static str] {
+        &["md5", "sha1"]
+    }
+
+    fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
+        const MARKERS: &[&str] = &[
+            "Md5::new",
+            "Md5::digest",
+            "md5::compute",
+            "Sha1::new",
+            "Sha1::digest",
+        ];
+        let lines: Vec<_> = ctx.lines().collect();
+        collect_invocations(ctx.content)
+            .into_iter()
+            .filter_map(|invocation| {
+                if invocation.kind != InvocationKind::Call
+                    || !MARKERS
+                        .iter()
+                        .any(|marker| invocation.path.ends_with(marker))
+                    || is_rule_ignored(
+                        ctx,
+                        invocation.line_no,
+                        self.id(),
+                        self.name(),
+                        self.category(),
+                    )
+                {
+                    return None;
+                }
+                let line = lines
+                    .iter()
+                    .find(|(line_no, _)| *line_no == invocation.line_no)
+                    .map(|(_, line)| *line)?;
+                if is_comment_line(line) {
+                    return None;
+                }
+                Some(self.finding(
+                    ctx,
+                    invocation.line_no,
+                    invocation.column,
+                    format!("weak hash construction `{}` found", invocation.path),
+                    line,
+                ))
+            })
+            .collect()
+    }
+}
+
+struct DisabledTlsValidationRule;
+
+impl Rule for DisabledTlsValidationRule {
+    fn id(&self) -> &'static str {
+        "FE046"
+    }
+
+    fn name(&self) -> &'static str {
+        "disabled-tls-validation"
+    }
+
+    fn description(&self) -> &'static str {
+        "disabling TLS certificate validation exposes connections to interception"
+    }
+
+    fn category(&self) -> Category {
+        Category::Secrets
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::High
+    }
+
+    fn suggestion(&self) -> Option<&'static str> {
+        Some("Keep certificate and hostname validation enabled; configure trusted certificates instead.")
+    }
+
+    fn prefilter_signatures(&self) -> &'static [&'static str] {
+        &[
+            "danger_accept_invalid_certs",
+            "danger_accept_invalid_hostnames",
+        ]
+    }
+
+    fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
+        let mut findings = Vec::new();
+        for chain in collect_method_chains(ctx.content) {
+            for call in chain.calls {
+                if !matches!(
+                    call.name,
+                    "danger_accept_invalid_certs" | "danger_accept_invalid_hostnames"
+                ) || call.args.trim() != "true"
+                    || is_rule_ignored(ctx, call.line_no, self.id(), self.name(), self.category())
+                {
+                    continue;
+                }
+                let snippet = ctx
+                    .lines()
+                    .nth(call.line_no.saturating_sub(1))
+                    .map(|(_, line)| line)
+                    .unwrap_or("");
+                findings.push(self.finding(
+                    ctx,
+                    call.line_no,
+                    call.column,
+                    format!("TLS validation disabled with `{}`", call.name),
+                    snippet,
+                ));
+            }
+        }
+        findings
+    }
+}
+
+struct PrivateKeyMarkerRule;
+
+impl Rule for PrivateKeyMarkerRule {
+    fn id(&self) -> &'static str {
+        "FE047"
+    }
+
+    fn name(&self) -> &'static str {
+        "embedded-private-key"
+    }
+
+    fn description(&self) -> &'static str {
+        "a PEM private-key marker appears in source code"
+    }
+
+    fn category(&self) -> Category {
+        Category::Secrets
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::High
+    }
+
+    fn suggestion(&self) -> Option<&'static str> {
+        Some("Remove the private key from source, store it in a secret manager, and rotate it if exposed.")
+    }
+
+    fn prefilter_signatures(&self) -> &'static [&'static str] {
+        &["-----BEGIN"]
+    }
+
+    fn scan(&self, ctx: &FileContext) -> Vec<Finding> {
+        ctx.lines()
+            .filter_map(|(line_no, line)| {
+                if is_comment_line(line)
+                    || is_rule_ignored(ctx, line_no, self.id(), self.name(), self.category())
+                    || !contains_ignore_case(line, "-----begin ")
+                    || !contains_ignore_case(line, "private key-----")
+                {
+                    return None;
+                }
+                let column = line.find("-----").unwrap_or(0) + 1;
+                Some(self.finding(
+                    ctx,
+                    line_no,
+                    column,
+                    "PEM private-key marker found in source".to_string(),
+                    line,
+                ))
+            })
+            .collect()
+    }
+}
+
 /// All secret-detection rules.
 pub fn rules() -> Vec<Box<dyn Rule>> {
     vec![
@@ -288,6 +482,9 @@ pub fn rules() -> Vec<Box<dyn Rule>> {
             keywords: &["token", "access_token", "auth_token", "bearer_token"],
         }),
         Box::new(CredentialUrlAssignmentRule),
+        Box::new(WeakHashRule),
+        Box::new(DisabledTlsValidationRule),
+        Box::new(PrivateKeyMarkerRule),
     ]
 }
 
@@ -346,5 +543,27 @@ mod tests {
         ));
         let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
         assert_eq!(ids, ["FE044"]);
+    }
+
+    #[test]
+    fn detects_weak_hash_tls_bypass_and_private_key_marker() {
+        let findings = scan_all(concat!(
+            "let digest = Md5::new();\n",
+            "let client = builder.danger_accept_invalid_certs(true);\n",
+            "let key = \"-----BEGIN PRIVATE KEY-----\";\n",
+            "// -----BEGIN PRIVATE KEY----- is only an example\n",
+        ));
+        let ids: Vec<&str> = findings.iter().map(|finding| finding.rule_id).collect();
+        assert_eq!(ids, ["FE045", "FE046", "FE047"]);
+    }
+
+    #[test]
+    fn ignores_tls_validation_when_set_to_false_and_respects_suppression() {
+        let findings = scan_all(concat!(
+            "builder.danger_accept_invalid_certs(false);\n",
+            "// fe203-ignore FE046\n",
+            "builder.danger_accept_invalid_hostnames(true);\n",
+        ));
+        assert!(findings.is_empty());
     }
 }
