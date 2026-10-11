@@ -324,8 +324,7 @@ impl Rule for RawPointerDerefRule {
                     let after_type = cursor + index + declaration.len();
                     let name = line[..cursor + index]
                         .split(|ch: char| !(ch == '_' || ch.is_ascii_alphanumeric()))
-                        .filter(|part| !part.is_empty())
-                        .next_back()
+                        .rfind(|part| !part.is_empty())
                         .unwrap_or("");
                     if is_identifier(name) && after_type < line.len() {
                         pointer_names.push(name.to_string());

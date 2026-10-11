@@ -71,7 +71,7 @@ pub(crate) fn extract_annotated_functions<'a>(
                 && bytes[idx..].starts_with(b"async")
                 && bytes
                     .get(idx + b"async".len())
-                    .map_or(true, |byte| !is_ident_continue(*byte)) =>
+                    .is_none_or(|byte| !is_ident_continue(*byte)) =>
             {
                 idx += b"async".len();
             }
