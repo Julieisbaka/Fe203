@@ -2,9 +2,12 @@
 //! path joins.
 // fe203-ignore-file FE120, FE121, FE122, FE123, FE124
 
+mod helpers;
+
 use crate::finding::{Category, Finding, Severity};
 use crate::rules::syntax::collect_method_chains;
 use crate::rules::{is_comment_line, is_rule_ignored, word_occurrences, FileContext, Rule};
+use helpers::call_arguments;
 
 const JOIN_CALLS: &[&str] = &[".join(", ".push("];
 const UNTRUSTED_KEYWORDS: &[&str] = &[
@@ -531,40 +534,6 @@ fn assigned_identifier(line: &str) -> Option<&str> {
     let lhs = lhs.strip_prefix("mut ").unwrap_or(lhs).trim();
     let lhs = lhs.split(':').next()?.trim();
     simple_identifier(lhs)
-}
-
-/// Returns (1-based column of the call start, argument text) for each
-/// occurrence of `call` (e.g. `.join(`) in `line`, using naive paren-depth
-/// counting to find the matching close paren.
-fn call_arguments(line: &str, call: &str) -> Vec<(usize, String)> {
-    let mut found = Vec::new();
-    let mut start = 0;
-    while let Some(pos) = line[start..].find(call) {
-        let call_idx = start + pos;
-        let args_start = call_idx + call.len();
-        let mut depth = 1i32;
-        let mut end = None;
-        for (offset, ch) in line[args_start..].char_indices() {
-            match ch {
-                '(' => depth += 1,
-                ')' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        end = Some(args_start + offset);
-                        break;
-                    }
-                }
-                _ => {}
-            }
-        }
-        if let Some(end) = end {
-            found.push((call_idx + 1, line[args_start..end].to_string()));
-            start = end + 1;
-        } else {
-            start = args_start;
-        }
-    }
-    found
 }
 
 #[cfg(test)]

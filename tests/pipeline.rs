@@ -137,10 +137,52 @@ fn full_pipeline_finds_all_requested_patterns() {
             "FE100", // command execution presence (sh env)
             "FE101", // shell string injection
             "FE101", // shell env var injection
+            "FE102", // uncontrolled command data
+            "FE102", // environment-controlled command data
             "FE120", // path traversal literal
             "FE121", // unsanitized path input
             "FE122", // archive entry join during extraction
+            "FE125", // uncontrolled data used in a path
         ]
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn workflow_files_are_scanned_for_mutable_action_references() {
+    let dir = fixture_dir("workflow-pinning");
+    std::fs::create_dir_all(dir.join(".github/workflows")).unwrap();
+    std::fs::write(
+        dir.join(".github/workflows/ci.yml"),
+        concat!(
+            "name: CI\n",
+            "jobs:\n",
+            "  build:\n",
+            "    steps:\n",
+            "      - uses: actions/checkout@v4\n",
+            "      - uses: owner/repo/.github/workflows/reuse.yml@main\n",
+            "      - uses: actions/setup-rust@0123456789abcdef0123456789abcdef01234567\n",
+        ),
+    )
+    .unwrap();
+
+    let registry = all_rules();
+    let rules: Vec<&dyn Rule> = registry.iter().map(|rule| rule.as_ref()).collect();
+    let mut files = Vec::new();
+    discover_files(
+        &dir,
+        &Config::default().exclude,
+        &Config::default().include,
+        &mut files,
+    );
+    let findings = scan_files(&files, &rules, true);
+    assert_eq!(
+        findings
+            .iter()
+            .map(|finding| finding.rule_id)
+            .collect::<Vec<_>>(),
+        ["FE140", "FE140"]
     );
 
     let _ = std::fs::remove_dir_all(&dir);
