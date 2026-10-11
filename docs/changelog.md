@@ -1,5 +1,14 @@
 # Fe203 Changelog
 
+## `0.3.1`
+
+- Added a copy-ready GitHub Actions workflow template that builds Fe203 from Git and uploads SARIF results to GitHub code scanning until the Cargo package is published.
+- Fixed false FE063 unused-variable findings from typed destructuring patterns, Rust string examples, lifetime syntax, and captured format arguments.
+- Fixed FE066 to ignore suppression-like text inside Rust strings and only evaluate actual comments.
+- Tightened FE125 so `.push()` calls on non-path collections are not reported as path construction.
+- Updated FE065 to recognize scanner test helpers as references to product behavior.
+- Pinned remote actions in the release workflow to verified full commit SHAs.
+
 ## `0.3.0`
 
 - Added FE022-FE024 to flag transmute APIs, destructor suppression, and zero-initialized values for manual safety review.
@@ -14,10 +23,6 @@
 - Added FE102 and FE125 to trace uncontrolled external data into command execution and filesystem paths.
 - Added FE140 for GitHub Actions and reusable workflow references that are not pinned to full commit SHAs; workflow YAML files under `.github/workflows/` are scanned by default.
 - Added the `supply-chain` category toggle.
-- Added a copy-ready GitHub Actions workflow template that builds Fe203 from Git and uploads SARIF results to GitHub code scanning until the Cargo package is published.
-- Fixed false FE063 unused-variable findings from typed destructuring patterns, Rust string examples, lifetime syntax, and captured format arguments.
-- Fixed FE066 to ignore suppression-like text inside Rust strings and only evaluate actual comments.
-- Pinned remote actions in the release workflow to verified full commit SHAs.
 - Hardened self-update asset selection so an asset can only use its own download URL, verified downloaded binary versions before replacement, and added Windows post-install verification with rollback on failure.
 
 ## `0.2.2`

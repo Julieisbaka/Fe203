@@ -154,3 +154,15 @@ fn looks_like_rule_id(token: &str) -> bool {
             .skip(2)
             .all(|byte| byte.is_ascii_digit())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn finds_path_rule_matches_after_removing_line_suppressions() {
+        let content = include_str!("../../cli/parser.rs");
+        let ctx = FileContext::new(std::path::Path::new("src/cli/parser.rs"), content);
+        assert!(unsuppressed_finding_ids(&ctx).contains("FE125"));
+    }
+}
