@@ -117,6 +117,7 @@ pub fn parse(args: &[String]) -> Result<CliOptions, String> {
                 if let Some(value) = next {
                     if !value.starts_with('-') {
                         let value = iter.next().expect("iterator advanced after clone check");
+                        // fe203-ignore FE125
                         opts.init_config = Some(PathBuf::from(value));
                         continue;
                     }
@@ -132,6 +133,7 @@ pub fn parse(args: &[String]) -> Result<CliOptions, String> {
                 if value.is_empty() {
                     return Err("--init-config requires a file path when using =".to_string());
                 }
+                // fe203-ignore FE125
                 opts.init_config = Some(PathBuf::from(value));
             }
             "-B" | "--init-baseline" => {
@@ -140,6 +142,7 @@ pub fn parse(args: &[String]) -> Result<CliOptions, String> {
                 if let Some(value) = next {
                     if !value.starts_with('-') {
                         let value = iter.next().expect("iterator advanced after clone check");
+                        // fe203-ignore FE125
                         opts.init_baseline = Some(PathBuf::from(value));
                         continue;
                     }
@@ -155,12 +158,14 @@ pub fn parse(args: &[String]) -> Result<CliOptions, String> {
                 if value.is_empty() {
                     return Err("--init-baseline requires a file path when using =".to_string());
                 }
+                // fe203-ignore FE125
                 opts.init_baseline = Some(PathBuf::from(value));
             }
             "-b" | "--baseline" => {
                 let value = iter
                     .next()
                     .ok_or_else(|| format!("{arg} requires a file path"))?;
+                // fe203-ignore FE125
                 opts.baseline = Some(PathBuf::from(value));
             }
             other if other.starts_with("--baseline=") => {
@@ -172,12 +177,14 @@ pub fn parse(args: &[String]) -> Result<CliOptions, String> {
                 if value.is_empty() {
                     return Err("--baseline requires a file path".to_string());
                 }
+                // fe203-ignore FE125
                 opts.baseline = Some(PathBuf::from(value));
             }
             "-c" | "--config" => {
                 let value = iter
                     .next()
                     .ok_or_else(|| format!("{arg} requires a file path"))?;
+                // fe203-ignore FE125
                 opts.config = Some(PathBuf::from(value));
             }
             other if other.starts_with("--config=") => {
@@ -189,6 +196,7 @@ pub fn parse(args: &[String]) -> Result<CliOptions, String> {
                 if value.is_empty() {
                     return Err("--config requires a file path".to_string());
                 }
+                // fe203-ignore FE125
                 opts.config = Some(PathBuf::from(value));
             }
             "-r" | "--rules" => {

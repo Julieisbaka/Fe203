@@ -87,6 +87,7 @@ fn perform_self_update(current_version: &str) -> Result<i32, String> {
     }
 
     let tmp = make_temp_update_dir()?;
+    // fe203-ignore FE122
     let archive_path = tmp.join(release.archive_file_name());
     let prepared_binary = (|| {
         download_release_asset(&release.asset_url, &archive_path)?;

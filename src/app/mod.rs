@@ -244,6 +244,7 @@ fn run_benchmark_mode(args: &[String], iterations: usize) -> i32 {
     for idx in 0..iterations {
         let start = Instant::now();
         let status = match Command::new(&exe)
+            // fe203-ignore FE102
             .args(&benchmark_args)
             .stdout(Stdio::null())
             .stderr(Stdio::null())

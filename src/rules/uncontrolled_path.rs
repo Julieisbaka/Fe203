@@ -121,9 +121,7 @@ fn is_path_receiver(content: &str, receiver: &str) -> bool {
 
     content.lines().any(|line| {
         let line = line.trim();
-        line.starts_with("let ")
-            && line.contains(receiver)
-            && line.contains("PathBuf")
+        line.starts_with("let ") && line.contains(receiver) && line.contains("PathBuf")
             || line.contains(&format!("{receiver}: &Path"))
             || line.contains(&format!("{receiver}: &mut Path"))
     })
@@ -209,9 +207,8 @@ mod tests {
             "fn collect(user_input: &str) { let mut values = Vec::new(); values.push(user_input); }\n"
         )
         .is_empty());
-        let findings = scan(
-            "fn extend(path: &mut PathBuf, user_input: &str) { path.push(user_input); }\n",
-        );
+        let findings =
+            scan("fn extend(path: &mut PathBuf, user_input: &str) { path.push(user_input); }\n");
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule_id, "FE125");
     }
