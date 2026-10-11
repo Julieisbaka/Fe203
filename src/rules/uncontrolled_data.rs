@@ -11,7 +11,10 @@ const SOURCE_MARKERS: &[&str] = &[
     "query.",
     "params.",
 ];
-const SOURCE_NAME_PARTS: &[&str] = &["user", "input", "argument", "request", "query"];
+const SOURCE_NAME_PARTS: &[&str] = &[
+    "user", "input", "argument", "request", "query", "command", "arg",
+];
+const VALIDATION_MARKERS: &[&str] = &["sanitize", "validate", "normalize", "safe_path"];
 
 pub(crate) fn controlled_names(content: &str) -> Vec<String> {
     let mut names: Vec<String> = Vec::new();
@@ -19,11 +22,11 @@ pub(crate) fn controlled_names(content: &str) -> Vec<String> {
         let code = code_only(line);
         let lower = code.to_ascii_lowercase();
         if let Some((name, value)) = simple_binding(&code) {
-            if has_source_marker(value)
-                || is_source_name(name)
-                || names
-                    .iter()
-                    .any(|source| !word_occurrences(value, source).is_empty())
+            if !is_validated(value)
+                && (has_source_marker(value)
+                    || names
+                        .iter()
+                        .any(|source| !word_occurrences(value, source).is_empty()))
             {
                 push_unique(&mut names, name.to_string());
             }
@@ -53,12 +56,16 @@ pub(crate) fn controlled_names(content: &str) -> Vec<String> {
 pub(crate) fn is_controlled(expression: &str, names: &[String]) -> bool {
     let code = code_only(expression);
     has_source_marker(&code)
-        || code
-            .split(|ch: char| !(ch == '_' || ch.is_ascii_alphanumeric()))
-            .any(is_source_name)
         || names
             .iter()
             .any(|name| !word_occurrences(&code, name).is_empty())
+}
+
+pub(crate) fn is_validated(expression: &str) -> bool {
+    let lower = code_only(expression).to_ascii_lowercase();
+    VALIDATION_MARKERS
+        .iter()
+        .any(|marker| lower.contains(marker))
 }
 
 pub(crate) fn code_only(text: &str) -> String {

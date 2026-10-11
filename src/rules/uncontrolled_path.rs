@@ -1,6 +1,6 @@
 use crate::finding::{Category, Finding, Severity};
 use crate::rules::syntax::{collect_invocations, collect_method_chains, InvocationKind};
-use crate::rules::uncontrolled_data::{code_only, controlled_names, is_controlled};
+use crate::rules::uncontrolled_data::{controlled_names, is_controlled, is_validated};
 use crate::rules::{is_rule_ignored, FileContext, Rule};
 
 pub fn rules() -> Vec<Box<dyn Rule>> {
@@ -56,7 +56,7 @@ impl Rule for UncontrolledPathRule {
             for call in chain.calls {
                 if matches!(call.name, "join" | "push")
                     && is_controlled(call.args, &tainted)
-                    && !looks_validated(call.args)
+                    && !is_validated(call.args)
                 {
                     add_finding(self, ctx, &lines, &mut findings, call.line_no, call.column);
                 }
@@ -86,7 +86,7 @@ impl Rule for UncontrolledPathRule {
             let Some(args) = invocation.args else {
                 continue;
             };
-            if is_path_sink && is_controlled(args, &tainted) && !looks_validated(args) {
+            if is_path_sink && is_controlled(args, &tainted) && !is_validated(args) {
                 add_finding(
                     self,
                     ctx,
@@ -124,19 +124,6 @@ fn add_finding(
             ),
         );
     }
-}
-
-fn looks_validated(expression: &str) -> bool {
-    let lower = code_only(expression).to_ascii_lowercase();
-    [
-        "sanitize",
-        "validate",
-        "canonicalize",
-        "normalize",
-        "safe_path",
-    ]
-    .iter()
-    .any(|marker| lower.contains(marker))
 }
 
 #[cfg(test)]
@@ -179,6 +166,12 @@ mod tests {
         ))
         .is_empty());
         assert!(scan("let path = root.join(validate_path(user_input)?);\n").is_empty());
+        assert!(scan(concat!(
+            "fn load(user_input: &str) {\n",
+            "    let validated = validate_path(user_input)?;\n",
+            "    let path = root.join(validated);\n",
+        ))
+        .is_empty());
         assert!(scan("// fe203-ignore FE125\nlet path = root.join(user_input);\n").is_empty());
     }
 }

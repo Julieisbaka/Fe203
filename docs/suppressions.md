@@ -37,6 +37,15 @@ fn example() {
 }
 ```
 
+In GitHub Actions workflow YAML, use `#` comments with the same directives.
+FE140 recognizes line-level and file-level YAML suppressions:
+
+```yaml
+# fe203-ignore-file FE140
+steps:
+  - uses: actions/checkout@v4
+```
+
 ## Notes
 
 - `fe203-ignore`: Added in `0.0.2`.

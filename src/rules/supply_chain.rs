@@ -171,5 +171,15 @@ mod tests {
             "# fe203-ignore FE140\nuses: actions/checkout@v4\n"
         )
         .is_empty());
+        assert!(scan(
+            ".github/workflows/ci.yaml",
+            "# fe203-ignore-file FE140\nuses: actions/checkout@v4\n"
+        )
+        .is_empty());
+        assert!(scan(
+            ".github/workflows/ci.yaml",
+            "uses: actions/checkout@v4 # fe203-ignore FE140\n"
+        )
+        .is_empty());
     }
 }

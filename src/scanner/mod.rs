@@ -59,6 +59,14 @@ mod tests {
         assert!(files
             .iter()
             .all(|path| path.starts_with(dir.join(".github/workflows"))));
+        let mut workflow_files = Vec::new();
+        discover_files(
+            &dir.join(".github/workflows"),
+            &[],
+            &[],
+            &mut workflow_files,
+        );
+        assert_eq!(workflow_files.len(), 2);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

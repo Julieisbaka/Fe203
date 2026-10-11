@@ -189,6 +189,30 @@ fn workflow_files_are_scanned_for_mutable_action_references() {
 }
 
 #[test]
+fn supply_chain_ruleset_can_disable_workflow_findings() {
+    let dir = fixture_dir("workflow-ruleset");
+    std::fs::create_dir_all(dir.join(".github/workflows")).unwrap();
+    std::fs::write(
+        dir.join(".github/workflows/ci.yml"),
+        "steps:\n  - uses: actions/checkout@v4\n",
+    )
+    .unwrap();
+    let config = Config::parse("[rulesets]\nsupply-chain = false\n").unwrap();
+    let registry = all_rules();
+    let rules: Vec<&dyn Rule> = registry
+        .iter()
+        .map(|rule| rule.as_ref())
+        .filter(|rule| config.rule_enabled(*rule))
+        .collect();
+    let mut files = Vec::new();
+    discover_files(&dir, &config.exclude, &config.include, &mut files);
+    let findings = scan_files(&files, &rules, true);
+    assert!(findings.is_empty());
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn config_disables_categories_and_rules() {
     let dir = fixture_dir("config");
     std::fs::write(dir.join("fixture.rs"), FIXTURE).unwrap();
