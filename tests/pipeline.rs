@@ -49,7 +49,7 @@ fn config() {
     let _ = used_left;
 }
 
-fn shell_and_paths(user: &str) {
+fn shell_and_paths(user: &str, user_input: &str) {
     std::process::Command::new("ls").arg("-la");
     std::process::Command::new("sh").arg("-c").arg(format!("echo {}", user));
     let shell_home = std::env::var("HOME").unwrap();
