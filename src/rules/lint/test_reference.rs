@@ -235,6 +235,11 @@ fn has_product_reference(content: &str) -> bool {
             || invocation.path.starts_with("super::")
             || invocation.path.starts_with("self::")
             || invocation.path.starts_with("fe203::")
+            || (invocation.kind == InvocationKind::Call
+                && matches!(
+                    invocation.path.rsplit("::").next(),
+                    Some("scan" | "scan_all" | "scan_with_rules")
+                ))
             || (invocation.kind == InvocationKind::Macro
                 && invocation.path == "env"
                 && invocation
@@ -315,6 +320,14 @@ mod tests {
     fn keeps_command_new_fe203_as_product_reference() {
         let findings = scan_with_rules(
             "#[test]\nfn t() {\n    let _ = std::process::Command::new(\"fe203\");\n}\n",
+        );
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn recognizes_scanner_test_helpers_as_product_references() {
+        let findings = scan_with_rules(
+            "#[test]\nfn rule_behavior() { assert!(scan_all(\"todo!();\").is_empty()); }\n",
         );
         assert!(findings.is_empty());
     }
