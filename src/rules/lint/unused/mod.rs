@@ -100,4 +100,29 @@ mod tests {
         );
         assert!(findings.is_empty());
     }
+
+    #[test]
+    fn ignores_type_names_in_typed_destructuring_patterns() {
+        let findings = scan_all(
+            "fn f(input: Option<(u32, bool)>) {\n    let Some((used, unused)): Option<(u32, bool)> = input else { return; };\n    println!(\"{used}\");\n}\n",
+        );
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("unused"));
+    }
+
+    #[test]
+    fn ignores_let_examples_inside_raw_strings() {
+        let findings = scan_all(
+            "fn f() {\n    let _source = r#\"\nlet hidden = 1;\n\"#;\n    let visible = 2;\n    println!(\"{visible}\");\n}\n",
+        );
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn follows_format_captures_after_lifetime_parameters() {
+        let findings = scan_all(
+            "fn f<'a>(value: &'a str) {\n    let kept = 1;\n    println!(\"{kept} {value}\");\n}\n",
+        );
+        assert!(findings.is_empty());
+    }
 }
