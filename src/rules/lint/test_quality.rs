@@ -526,6 +526,6 @@ mod tests {
             "#[tokio::test]\nasync fn waits() { tokio::time::sleep(duration).await; }\n",
         ));
         let ids: Vec<&str> = findings.iter().map(|finding| finding.rule_id).collect();
-        assert_eq!(ids, ["FE071", "FE072", "FE073", "FE074"]);
+        assert_eq!(ids, ["FE071", "FE072", "FE073", "FE073", "FE074"]);
     }
 }

@@ -67,6 +67,14 @@ pub(crate) fn extract_annotated_functions<'a>(
                     &mut out,
                 );
             }
+            b'a' if pending_attr_line.is_some()
+                && bytes[idx..].starts_with(b"async")
+                && bytes
+                    .get(idx + b"async".len())
+                    .map_or(true, |byte| !is_ident_continue(*byte)) =>
+            {
+                idx += b"async".len();
+            }
             b if !b.is_ascii_whitespace() => {
                 pending_attr_line = None;
                 idx += 1;

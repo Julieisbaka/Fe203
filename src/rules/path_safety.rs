@@ -3,7 +3,7 @@
 // fe203-ignore-file FE120, FE121, FE122, FE123, FE124
 
 use crate::finding::{Category, Finding, Severity};
-use crate::rules::syntax::{collect_invocations, collect_method_chains, InvocationKind};
+use crate::rules::syntax::collect_method_chains;
 use crate::rules::{is_comment_line, is_rule_ignored, word_occurrences, FileContext, Rule};
 
 const JOIN_CALLS: &[&str] = &[".join(", ".push("];

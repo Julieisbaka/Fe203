@@ -3,8 +3,14 @@
 ## `0.3.0`
 
 - Added FE022-FE024 to flag transmute APIs, destructor suppression, and zero-initialized values for manual safety review.
+- Expanded unsafe checks with FE025-FE027 for mutable statics, raw-pointer dereferences, and unsafe blocks without nearby safety explanations.
 - Added FE045-FE047 for weak hash usage, disabled TLS validation, and embedded PEM private-key markers.
+- Added FE048-FE050 for weak random-number generation in security-sensitive contexts, authorization-field serde defaults, and permissive CORS.
 - Added FE067 for discarded results from common filesystem operations.
+- Added FE068-FE074 for error-hiding defaults, discarded fallible calls, vague `expect` messages, and test-quality issues.
+- Added FE110-FE112 for blocking calls in async functions, synchronous locks held across `.await`, and detached task handles.
+- Added FE123-FE124 for absolute paths passed to `.join()` and lossy path/UTF-8 conversions.
+- Added the `async` and `performance` categories, including FE130-FE133 for avoidable work in loops, collection pipelines, regex compilation, and string formatting.
 - Hardened self-update asset selection so an asset can only use its own download URL, verified downloaded binary versions before replacement, and added Windows post-install verification with rollback on failure.
 
 ## `0.2.2`

@@ -7,6 +7,8 @@ Rules covering path traversal and untrusted path-join risks.
 | FE120 | high     | `path-traversal-literal`       | a literal `..` path segment passed to `.join(`, `.push(`, or `PathBuf::from(`                          |
 | FE121 | warning  | `unsanitized-path-input`       | a `.join(`/`.push(` call whose argument textually looks like untrusted input                           |
 | FE122 | high     | `archive-entry-path-traversal` | archive extraction code that joins destination paths with entry-derived names without clear validation |
+| FE123 | warning  | `absolute-path-join`           | an absolute path passed to `.join()` that can replace the base directory                                  |
+| FE124 | info     | `lossy-path-conversion`        | lossy path or UTF-8 conversion that may discard data                                                     |
 
 ## FE120 — `path-traversal-literal`
 
@@ -39,6 +41,18 @@ join-like text inside comments or string literals is ignored.
 
 **Suggestion:** validate archive entry names and reject `..` or absolute paths
 before constructing extraction destinations.
+
+## FE123 — `absolute-path-join`
+
+Flags `.join(...)` with a literal absolute path or an identifier explicitly
+named as an absolute path. An absolute argument replaces the base path rather
+than remaining beneath it.
+
+## FE124 — `lossy-path-conversion`
+
+Flags `to_string_lossy()` and `String::from_utf8_lossy()` because invalid
+platform path bytes or UTF-8 are replaced. Keep the original OS string where
+possible, or handle strict UTF-8 conversion errors explicitly.
 
 See [overview.md](overview.md) for the rule model and [../suppressions.md](../suppressions.md)
 for how to suppress an individual finding.

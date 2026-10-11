@@ -102,6 +102,7 @@ fn full_pipeline_finds_all_requested_patterns() {
             "FE004", // panic!
             "FE020", // unsafe block
             "FE021", // unsafe fn
+            "FE027", // unsafe block without a nearby safety explanation
             "FE040", // password
             "FE041", // api_key
             "FE042", // secret
@@ -168,7 +169,7 @@ fn config_disables_categories_and_rules() {
     let mut ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
     ids.sort();
     // Only unsafe rules plus the explicitly re-enabled panic! rule remain.
-    assert_eq!(ids, ["FE004", "FE020", "FE021"]);
+    assert_eq!(ids, ["FE004", "FE020", "FE021", "FE027"]);
 
     let _ = std::fs::remove_dir_all(&dir);
 }
